@@ -57,9 +57,8 @@ tanker-tracker/
 │       ├── dashboard.css
 │       └── admin.css
 ├── scripts/
-│   ├── setup.sh            # One-time server setup (Ubuntu)
-│   ├── enable-https.sh     # Let's Encrypt HTTPS setup (needs a domain)
-│   └── deploy.sh           # Pull latest + zero-downtime reload
+│   ├── setup.sh            # One-time server setup (Node, PM2, Nginx, HTTPS)
+│   └── deploy.sh           # Pull latest + reload + ensure HTTPS
 └── uploads/                # Stored tanker photos (gitignored)
 ```
 
@@ -147,33 +146,33 @@ POST   /api/admin/truncate
 ### 1. Create the instance
 - Blueprint: **Ubuntu 22.04 LTS**
 - Plan: **$5/month** (1 GB RAM)
-- Attach a **static IP** and open **port 80** in the Lightsail firewall
+- Attach a **static IP** and open **ports 80 and 443** in the Lightsail firewall
 
-### 2. SSH in and run the setup script
+### 2. Point your domain (required for geolocation)
+The browser Geolocation API only works over HTTPS, so geofencing needs a domain.
+Add a DNS **A record** pointing your domain (e.g. `society.example.com`) at the
+Lightsail static IP, and confirm it resolves: `dig +short society.example.com`.
+
+> Skipping the domain runs the app on plain HTTP — everything works except
+> geolocation/geofencing.
+
+### 3. SSH in and run the setup script
 ```bash
 curl -fsSL https://raw.githubusercontent.com/espazein/tanker-tracker/main/scripts/setup.sh -o setup.sh
 bash setup.sh
 ```
-The script installs Node.js 20, PM2, Nginx, clones the repo, and starts the app. It pauses once to let you fill in `.env`.
-
-### 3. Enable HTTPS (required for geolocation)
-
-The browser Geolocation API only works over HTTPS (or `localhost`). Geofencing
-will not work on a plain `http://<ip>/` origin. To enable HTTPS:
-
-1. Point a domain's **A record** at the Lightsail static IP
-2. Open **port 443** in the Lightsail firewall
-3. Run:
-```bash
-bash /opt/tanker-tracker/scripts/enable-https.sh tanker.yourdomain.com you@email.com
-```
-This obtains a free Let's Encrypt certificate, configures Nginx, forces an
-HTTP→HTTPS redirect, and sets up automatic renewal.
+The script installs Node.js 20, PM2, Nginx, and Certbot, clones the repo, and
+starts the app. It pauses once for you to fill in `.env` — set `ADMIN_PIN`,
+`SOCIETY_NAME`, and (for HTTPS) `DOMAIN` + `SSL_EMAIL`. If a valid domain is set,
+it automatically obtains a Let's Encrypt certificate and forces HTTPS.
 
 ### 4. Deploy future updates
 ```bash
 bash /opt/tanker-tracker/scripts/deploy.sh
 ```
+Pulls the latest code, reloads the app with zero downtime, and — if `DOMAIN` is
+set but no certificate exists yet — obtains one (e.g. after DNS finishes
+propagating). Let's Encrypt renewal is automatic thereafter.
 
 ---
 
