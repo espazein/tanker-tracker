@@ -76,7 +76,7 @@ pm2 save
 echo "==> [8/8] HTTPS"
 if [[ -n "$DOMAIN" && -n "$SSL_EMAIL" ]]; then
   RESOLVED="$(dig +short "$DOMAIN" | tail -1)"
-  THIS_IP="$(curl -s ifconfig.me)"
+  THIS_IP="$(curl -4 -s ifconfig.me)"
   if [[ "$RESOLVED" != "$THIS_IP" ]]; then
     echo "⚠️  $DOMAIN resolves to '${RESOLVED:-nothing}', not this server ($THIS_IP)."
     echo "    Skipping certificate. After fixing DNS, run: bash scripts/deploy.sh"
@@ -88,7 +88,7 @@ else
   echo "    DOMAIN/SSL_EMAIL not set — running HTTP only. Geolocation will not work."
 fi
 
-URL="${DOMAIN:-$(curl -s ifconfig.me)}"
+URL="${DOMAIN:-$(curl -4 -s ifconfig.me)}"
 SCHEME=$([[ -n "$DOMAIN" ]] && echo https || echo http)
 echo ""
 echo "✅  Setup complete!"

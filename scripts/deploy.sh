@@ -26,7 +26,7 @@ if [[ -n "$DOMAIN" && -n "$SSL_EMAIL" ]]; then
   if [[ ! -d "/etc/letsencrypt/live/$DOMAIN" ]]; then
     echo "==> No certificate for $DOMAIN yet — attempting to obtain one"
     RESOLVED="$(dig +short "$DOMAIN" | tail -1)"
-    THIS_IP="$(curl -s ifconfig.me)"
+    THIS_IP="$(curl -4 -s ifconfig.me)"
     if [[ "$RESOLVED" == "$THIS_IP" ]]; then
       sudo sed -i "s/server_name .*/server_name $DOMAIN;/" "$NGINX_CONF"
       sudo nginx -t && sudo systemctl reload nginx
