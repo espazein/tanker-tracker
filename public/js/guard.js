@@ -24,19 +24,57 @@
     deviceLabel.textContent = `Device: …${deviceToken.slice(-8)}`;
   }
 
+  // Ask the server whether a token is still a valid, active device
+  async function isTokenValid(token) {
+    try {
+      const r = await fetch('/api/device/check', { headers: { 'X-Device-Id': token } });
+      const d = await r.json();
+      return !!d.valid;
+    } catch {
+      return null; // network/offline — can't determine
+    }
+  }
+
+  function revokeDevice(message) {
+    localStorage.removeItem(DEVICE_TOKEN_KEY);
+    deviceToken = null;
+    tokenInput.value = '';
+    showActivation();
+    if (message) {
+      activationError.textContent = message;
+      activationError.classList.remove('hidden');
+    }
+  }
+
+  // On load: validate the cached token against the server
   if (deviceToken) {
-    showGuard();
+    showGuard(); // optimistic — confirm in background
+    isTokenValid(deviceToken).then(valid => {
+      if (valid === false) revokeDevice('This device is no longer authorised. Enter a new access code.');
+    });
   } else {
     showActivation();
   }
 
-  btnActivate.addEventListener('click', () => {
+  btnActivate.addEventListener('click', async () => {
     const token = tokenInput.value.trim();
     if (!token) {
       activationError.textContent = 'Please enter your access code.';
       activationError.classList.remove('hidden');
       return;
     }
+    btnActivate.disabled = true;
+    btnActivate.textContent = 'Checking…';
+    const valid = await isTokenValid(token);
+    btnActivate.disabled = false;
+    btnActivate.textContent = 'Activate Device';
+
+    if (valid === false) {
+      activationError.textContent = 'Invalid access code. Contact your administrator.';
+      activationError.classList.remove('hidden');
+      return;
+    }
+    // valid === true, or null (offline) → accept and let submit-time enforce
     localStorage.setItem(DEVICE_TOKEN_KEY, token);
     deviceToken = token;
     activationError.classList.add('hidden');
@@ -208,6 +246,9 @@
         const dup = data.duplicate_entry;
         showResult('duplicate', '⚠️ Duplicate Detected', data.message, null,
           dup ? `Previous: ${dup.vendor_name} — ${dup.plate_number || 'no plate'} — ${formatTs(dup.submitted_at)}` : '');
+
+      } else if (data.error === 'device_unauthorized' || data.error === 'device_unregistered') {
+        revokeDevice('This device is no longer authorised. Enter a new access code.');
 
       } else {
         showResult('error', '❌ Submission Failed', data.message || data.error || 'Unknown error. Please try again.', null);

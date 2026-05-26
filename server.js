@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,14 @@ const submitLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'rate_limited', message: 'Too many submissions. Please wait before trying again.' }
+});
+
+// Lightweight device validation for the guard page (not rate-limited)
+app.get('/api/device/check', (req, res) => {
+  const deviceId = req.headers['x-device-id'];
+  if (!deviceId) return res.json({ valid: false });
+  const device = db.prepare('SELECT 1 FROM devices WHERE device_id = ? AND is_active = 1').get(deviceId);
+  res.json({ valid: !!device });
 });
 
 app.use('/api/submit', submitLimiter, require('./routes/submit'));
