@@ -1,4 +1,4 @@
-require('dotenv').config();   // reads /opt/tanker-tracker/.env at PM2 start time
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 module.exports = {
   apps: [{
