@@ -8,8 +8,11 @@ const db = require('../db');
 
 const DUPLICATE_WINDOW_MS = 45 * 60 * 1000;
 
+const UPLOAD_DIR = path.join(__dirname, '../uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true }); // ensure it exists on startup
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
     cb(null, `tanker_${Date.now()}${ext}`);
