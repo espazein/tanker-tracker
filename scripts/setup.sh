@@ -81,6 +81,11 @@ if [[ -n "$DOMAIN" && -n "$SSL_EMAIL" ]]; then
     echo "⚠️  $DOMAIN resolves to '${RESOLVED:-nothing}', not this server ($THIS_IP)."
     echo "    Skipping certificate. After fixing DNS, run: bash scripts/deploy.sh"
   else
+    if ! command -v certbot >/dev/null 2>&1; then
+      echo "==> Installing Certbot"
+      sudo apt-get update -y
+      sudo apt-get install -y certbot python3-certbot-nginx
+    fi
     sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect
     echo "✅  HTTPS enabled (auto-renews via certbot timer)."
   fi
