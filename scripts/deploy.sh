@@ -28,6 +28,11 @@ if [[ -n "$DOMAIN" && -n "$SSL_EMAIL" ]]; then
     RESOLVED="$(dig +short "$DOMAIN" | tail -1)"
     THIS_IP="$(curl -4 -s ifconfig.me)"
     if [[ "$RESOLVED" == "$THIS_IP" ]]; then
+      if ! command -v certbot >/dev/null 2>&1; then
+        echo "==> Installing Certbot"
+        sudo apt-get update -y
+        sudo apt-get install -y certbot python3-certbot-nginx
+      fi
       sudo sed -i "s/server_name .*/server_name $DOMAIN;/" "$NGINX_CONF"
       sudo nginx -t && sudo systemctl reload nginx
       sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect
