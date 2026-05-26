@@ -58,6 +58,7 @@ tanker-tracker/
 │       └── admin.css
 ├── scripts/
 │   ├── setup.sh            # One-time server setup (Ubuntu)
+│   ├── enable-https.sh     # Let's Encrypt HTTPS setup (needs a domain)
 │   └── deploy.sh           # Pull latest + zero-downtime reload
 └── uploads/                # Stored tanker photos (gitignored)
 ```
@@ -155,7 +156,21 @@ bash setup.sh
 ```
 The script installs Node.js 20, PM2, Nginx, clones the repo, and starts the app. It pauses once to let you fill in `.env`.
 
-### 3. Deploy future updates
+### 3. Enable HTTPS (required for geolocation)
+
+The browser Geolocation API only works over HTTPS (or `localhost`). Geofencing
+will not work on a plain `http://<ip>/` origin. To enable HTTPS:
+
+1. Point a domain's **A record** at the Lightsail static IP
+2. Open **port 443** in the Lightsail firewall
+3. Run:
+```bash
+bash /opt/tanker-tracker/scripts/enable-https.sh tanker.yourdomain.com you@email.com
+```
+This obtains a free Let's Encrypt certificate, configures Nginx, forces an
+HTTP→HTTPS redirect, and sets up automatic renewal.
+
+### 4. Deploy future updates
 ```bash
 bash /opt/tanker-tracker/scripts/deploy.sh
 ```
