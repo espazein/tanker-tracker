@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tanker Tracker — Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="admin-page">
+
+  <header class="admin-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <span class="header-icon">⚙️</span>
+        <div>
+          <h1>Admin Panel</h1>
+          <p>Tanker Tracker Configuration</p>
+        </div>
+      </div>
+      <a href="/" class="btn btn-outline btn-sm">← Dashboard</a>
+    </div>
+  </header>
+
+  <!-- PIN screen -->
+  <main class="admin-main" id="pin-screen">
+    <section class="card pin-card">
+      <h2>Enter Admin PIN</h2>
+      <div class="field-group" style="margin-top:16px">
+        <input type="password" id="pin-input" class="admin-input" placeholder="PIN"
+               autocomplete="off" maxlength="20">
+      </div>
+      <div id="pin-error" class="status-msg error hidden"></div>
+      <button class="btn btn-primary btn-lg" id="btn-pin-submit" style="margin-top:8px">Unlock</button>
+    </section>
+  </main>
+
+  <!-- Admin content -->
+  <main class="admin-main hidden" id="admin-content">
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="devices">📱 Devices</button>
+      <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
+      <button class="tab-btn" data-tab="danger">⚠️ Danger Zone</button>
+    </div>
+
+    <!-- Devices tab -->
+    <section id="tab-devices" class="tab-content card">
+      <div class="card-header">
+        <h2 class="card-title">Registered Devices</h2>
+        <button class="btn btn-primary btn-sm" id="btn-add-device">+ Add Device</button>
+      </div>
+
+      <div id="add-device-form" class="add-device-form hidden">
+        <div class="field-group">
+          <label>Label <span class="hint">(e.g. Guard A – Gate 1)</span></label>
+          <input type="text" id="new-device-label" class="admin-input" placeholder="Guard label">
+        </div>
+        <div class="field-group">
+          <label>Custom Access Code <span class="hint">(leave blank to auto-generate)</span></label>
+          <input type="text" id="new-device-id" class="admin-input"
+                 placeholder="Optional — auto-generated if blank"
+                 autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" id="btn-save-device">Create</button>
+          <button class="btn btn-outline" id="btn-cancel-device">Cancel</button>
+        </div>
+        <div id="new-device-result" class="new-device-result hidden"></div>
+      </div>
+
+      <div id="devices-list">
+        <div class="empty-state">Loading devices…</div>
+      </div>
+    </section>
+
+    <!-- Geofence tab -->
+    <section id="tab-geofence" class="tab-content card hidden">
+      <h2 class="card-title">Geofence Settings</h2>
+      <p class="help-text">Submissions are only accepted from within this radius of the gate. Leave all three fields blank and save to disable geofencing.</p>
+
+      <div class="field-group">
+        <label>Gate Latitude</label>
+        <input type="number" id="fence-lat" class="admin-input" placeholder="e.g. 19.07283" step="0.00001">
+      </div>
+      <div class="field-group">
+        <label>Gate Longitude</label>
+        <input type="number" id="fence-lng" class="admin-input" placeholder="e.g. 72.88261" step="0.00001">
+      </div>
+      <div class="field-group">
+        <label>Allowed Radius (metres)</label>
+        <input type="number" id="fence-radius" class="admin-input" placeholder="e.g. 100" min="10" max="5000">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="btn-save-geofence">Save Geofence</button>
+        <button class="btn btn-outline" id="btn-clear-geofence">Disable Geofencing</button>
+      </div>
+      <div id="geofence-status" class="status-msg hidden"></div>
+    </section>
+
+    <!-- Danger zone tab -->
+    <section id="tab-danger" class="tab-content card hidden">
+      <h2 class="card-title danger-title">Danger Zone</h2>
+      <p class="help-text">These actions cannot be undone.</p>
+      <div class="danger-item">
+        <div>
+          <strong>Delete All Delivery Records</strong>
+          <p class="help-text" style="margin:4px 0 0">Permanently removes all tanker entries. Uploaded photos are kept.</p>
+        </div>
+        <button class="btn btn-danger" id="btn-truncate">Delete All Data</button>
+      </div>
+      <div id="danger-status" class="status-msg hidden"></div>
+    </section>
+
+  </main>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

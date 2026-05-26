@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tanker Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="dash-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <span class="header-icon">🚛</span>
+        <div>
+          <h1>Water Tanker Dashboard</h1>
+          <p id="society-subtitle">Society Water Management</p>
+        </div>
+      </div>
+      <a href="/guard" class="btn btn-outline btn-sm guard-link">Guard Portal →</a>
+    </div>
+  </header>
+
+  <main class="dash-main">
+
+    <!-- Stats row -->
+    <section class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value" id="stat-today">—</div>
+        <div class="stat-label">Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📆</div>
+        <div class="stat-value" id="stat-week">—</div>
+        <div class="stat-label">This Week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🗓️</div>
+        <div class="stat-value" id="stat-month">—</div>
+        <div class="stat-label">This Month</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="stat-alltime">—</div>
+        <div class="stat-label">All Time</div>
+      </div>
+    </section>
+
+    <!-- Two column -->
+    <div class="dash-grid">
+
+      <!-- Vendor breakdown -->
+      <section class="card">
+        <h2 class="card-title">Today's Vendors</h2>
+        <div id="vendor-list">
+          <div class="empty-state">No deliveries today yet</div>
+        </div>
+      </section>
+
+      <!-- Weekly trend -->
+      <section class="card">
+        <h2 class="card-title">7-Day Trend</h2>
+        <div id="trend-chart" class="trend-chart"></div>
+      </section>
+
+    </div>
+
+    <!-- Recent entries -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recent Deliveries</h2>
+        <span id="last-updated" class="last-updated"></span>
+      </div>
+      <div id="entries-list" class="entries-list">
+        <div class="empty-state">Loading...</div>
+      </div>
+      <div id="load-more-wrap" class="hidden">
+        <button id="btn-load-more" class="btn btn-outline">Load More</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Photo lightbox -->
+  <div id="lightbox" class="lightbox hidden">
+    <div class="lightbox-bg"></div>
+    <div class="lightbox-content">
+      <button class="lightbox-close" id="lb-close">✕</button>
+      <img id="lb-img" src="" alt="Tanker photo">
+      <div id="lb-meta" class="lb-meta"></div>
+    </div>
+  </div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

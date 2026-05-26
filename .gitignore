@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Database (local data — not committed)
+tanker.db
+
+# Uploaded photos
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png
+uploads/*.webp
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*

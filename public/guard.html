@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Tanker Entry — Guard</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/guard.css">
+</head>
+<body class="guard-page">
+
+  <header class="guard-header">
+    <div class="header-inner">
+      <span class="header-icon">🚛</span>
+      <div>
+        <h1>Water Tanker Entry</h1>
+        <p>Security Guard Portal</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Activation screen (shown when no device token stored) -->
+  <main class="guard-main" id="activation-screen">
+    <section class="card activation-card">
+      <div class="activation-icon">🔐</div>
+      <h2 class="activation-title">Device Activation Required</h2>
+      <p class="activation-desc">Enter the access code provided by your administrator to activate this device.</p>
+      <div class="field-group">
+        <label for="token-input">Access Code</label>
+        <input type="text" id="token-input" placeholder="Paste or type your access code"
+               autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+      </div>
+      <div id="activation-error" class="activation-error hidden"></div>
+      <button class="btn btn-primary btn-lg" id="btn-activate" type="button">Activate Device</button>
+    </section>
+  </main>
+
+  <!-- Guard form (hidden until activated) -->
+  <main class="guard-main hidden" id="guard-main">
+
+    <!-- Location status bar -->
+    <div id="location-status" class="location-status location-loading">
+      <span id="location-icon">⏳</span>
+      <span id="location-text">Getting location…</span>
+    </div>
+
+    <!-- Step 1: Photo -->
+    <section class="card" id="step-photo">
+      <div class="step-label">Step 1 — Photo</div>
+      <div id="camera-area">
+        <div id="preview-placeholder" class="preview-placeholder">
+          <span class="placeholder-icon">📷</span>
+          <p>Take a photo of the tanker</p>
+        </div>
+        <img id="photo-preview" class="photo-preview hidden" alt="Tanker photo">
+        <div id="photo-meta" class="photo-meta hidden"></div>
+      </div>
+      <div class="camera-buttons">
+        <button class="btn btn-primary" id="btn-camera" type="button">
+          <span>📷</span> Take Photo
+        </button>
+      </div>
+      <input type="file" id="input-camera" accept="image/*" capture="environment" class="hidden">
+    </section>
+
+    <!-- Step 2: Details -->
+    <section class="card" id="step-details">
+      <div class="step-label">Step 2 — Details</div>
+
+      <div class="field-group">
+        <label for="vendor-name">Vendor / Supplier Name <span class="required">*</span></label>
+        <input type="text" id="vendor-name" placeholder="e.g. Shree Water Suppliers" autocomplete="off">
+        <div id="vendor-suggestions" class="suggestions hidden"></div>
+      </div>
+
+      <div class="field-group">
+        <label for="plate-number">Number Plate <span class="required">*</span></label>
+        <input type="text" id="plate-number" placeholder="e.g. MH12AB1234"
+               autocomplete="off" style="text-transform:uppercase">
+      </div>
+
+      <div class="field-group">
+        <label for="notes">Notes (optional)</label>
+        <input type="text" id="notes" placeholder="Any additional info">
+      </div>
+    </section>
+
+    <!-- Submit -->
+    <div id="submit-area">
+      <button class="btn btn-success btn-lg" id="btn-submit" type="button" disabled>
+        Submit Entry
+      </button>
+    </div>
+
+    <!-- Result -->
+    <div id="result-card" class="result-card hidden"></div>
+
+    <!-- Device footer -->
+    <div class="device-footer">
+      <span id="device-label">Device active</span>
+      &middot;
+      <button class="link-btn" id="btn-reset-device" type="button">Change access code</button>
+    </div>
+
+  </main>
+
+  <script src="/js/guard.js"></script>
+</body>
+</html>
