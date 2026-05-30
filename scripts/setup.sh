@@ -70,6 +70,7 @@ SSL_EMAIL="$(read_env SSL_EMAIL .env)"
 
 echo "==> [6/8] Configuring Nginx"
 sudo cp nginx.conf "$NGINX_CONF"
+sudo cp nginx-limits.conf /etc/nginx/conf.d/tanker-limits.conf
 if [[ -n "$DOMAIN" ]]; then
   sudo sed -i "s/server_name .*/server_name $DOMAIN;/" "$NGINX_CONF"
 fi

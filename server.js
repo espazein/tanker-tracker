@@ -21,17 +21,46 @@ const submitLimiter = rateLimit({
   message: { error: 'rate_limited', message: 'Too many submissions. Please wait before trying again.' }
 });
 
-// Lightweight device validation for the guard page (not rate-limited)
-app.get('/api/device/check', (req, res) => {
+// Admin: throttle PIN brute-force. Only failed (>=400) requests count toward
+// the limit, so an authenticated admin doing many ops is not impacted.
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many failed attempts. Try again in 15 minutes.' }
+});
+
+// Dashboard: 60 req/min per IP (well above legitimate dashboard refresh rate)
+const dashboardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many requests. Please slow down.' }
+});
+
+// Device check: 30 req/min per IP
+const deviceCheckLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited' }
+});
+
+// Lightweight device validation for the guard page
+app.get('/api/device/check', deviceCheckLimiter, (req, res) => {
   const deviceId = req.headers['x-device-id'];
   if (!deviceId) return res.json({ valid: false });
   const device = db.prepare('SELECT 1 FROM devices WHERE device_id = ? AND is_active = 1').get(deviceId);
   res.json({ valid: !!device });
 });
 
-app.use('/api/submit', submitLimiter, require('./routes/submit'));
-app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/admin', require('./routes/admin'));
+app.use('/api/submit',    submitLimiter,    require('./routes/submit'));
+app.use('/api/dashboard', dashboardLimiter, require('./routes/dashboard'));
+app.use('/api/admin',     adminLimiter,     require('./routes/admin'));
 
 app.get('/guard', (req, res) => res.sendFile(path.join(__dirname, 'public/guard.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin.html')));

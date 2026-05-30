@@ -19,6 +19,26 @@ npm install --omit=dev
 echo "==> Reloading app (zero-downtime)"
 pm2 reload tanker-tracker --update-env
 
+# Ensure Nginx rate-limit zones and per-location directives are in place.
+# Safe to run repeatedly; only touches Nginx if something is actually missing.
+NGINX_RELOAD=0
+LIMITS_DST=/etc/nginx/conf.d/tanker-limits.conf
+if [[ -f nginx-limits.conf ]]; then
+  if ! sudo cmp -s nginx-limits.conf "$LIMITS_DST" 2>/dev/null; then
+    echo "==> Installing rate-limit zones"
+    sudo cp nginx-limits.conf "$LIMITS_DST"
+    NGINX_RELOAD=1
+  fi
+fi
+if [[ -f "$NGINX_CONF" ]] && ! sudo grep -q "tt_req" "$NGINX_CONF"; then
+  echo "==> Injecting rate-limit directives into Nginx site config"
+  sudo sed -i '/location \/ {/a \        limit_req  zone=tt_req burst=60 nodelay;\n        limit_conn tt_conn 20;' "$NGINX_CONF"
+  NGINX_RELOAD=1
+fi
+if [[ "$NGINX_RELOAD" == 1 ]]; then
+  sudo nginx -t && sudo systemctl reload nginx
+fi
+
 # Ensure HTTPS if a domain is configured but no certificate exists yet.
 DOMAIN="$(read_env DOMAIN .env)"
 SSL_EMAIL="$(read_env SSL_EMAIL .env)"
