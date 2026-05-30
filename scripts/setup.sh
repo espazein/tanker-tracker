@@ -31,28 +31,39 @@ pm2 set pm2-logrotate:retain 7
 echo "==> [3/8] Installing Nginx & Certbot"
 sudo apt-get install -y nginx certbot python3-certbot-nginx
 
-echo "==> [4/8] Cloning repository to $APP_DIR"
-sudo git clone "$REPO" "$APP_DIR"
-sudo chown -R ubuntu:ubuntu "$APP_DIR"
-cd "$APP_DIR"
+echo "==> [4/8] Fetching repository at $APP_DIR"
+if [[ -d "$APP_DIR/.git" ]]; then
+  echo "    Already cloned — pulling latest"
+  sudo chown -R ubuntu:ubuntu "$APP_DIR"
+  cd "$APP_DIR"
+  git pull origin main
+else
+  sudo git clone "$REPO" "$APP_DIR"
+  sudo chown -R ubuntu:ubuntu "$APP_DIR"
+  cd "$APP_DIR"
+fi
 
 echo "==> [5/8] Installing Node dependencies"
 npm install --omit=dev
 mkdir -p uploads
 
-echo "     Creating .env — EDIT THIS BEFORE CONTINUING"
-cp .env.example .env
-sed -i 's/PORT=.*/PORT=3000/' .env
-echo ""
-echo "┌─────────────────────────────────────────────────────────────────────┐"
-echo "│  ⚠️  Edit /opt/tanker-tracker/.env now:                             │"
-echo "│       ADMIN_PIN=your_secure_pin                                     │"
-echo "│       SOCIETY_NAME=Your Society Name                                │"
-echo "│       DOMAIN=society.example.com   (blank = HTTP only, no geo)      │"
-echo "│       SSL_EMAIL=you@example.com                                     │"
-echo "└─────────────────────────────────────────────────────────────────────┘"
-echo ""
-read -rp "Press Enter once you have saved .env to continue..."
+if [[ -f .env ]]; then
+  echo "     .env already present — keeping existing values"
+else
+  echo "     Creating .env — EDIT THIS BEFORE CONTINUING"
+  cp .env.example .env
+  sed -i 's/PORT=.*/PORT=3000/' .env
+  echo ""
+  echo "┌─────────────────────────────────────────────────────────────────────┐"
+  echo "│  ⚠️  Edit $APP_DIR/.env now:                                        │"
+  echo "│       ADMIN_PIN=your_secure_pin                                     │"
+  echo "│       SOCIETY_NAME=Your Society Name                                │"
+  echo "│       DOMAIN=society.example.com   (blank = HTTP only, no geo)      │"
+  echo "│       SSL_EMAIL=you@example.com                                     │"
+  echo "└─────────────────────────────────────────────────────────────────────┘"
+  echo ""
+  read -rp "Press Enter once you have saved .env to continue..."
+fi
 
 DOMAIN="$(read_env DOMAIN .env)"
 SSL_EMAIL="$(read_env SSL_EMAIL .env)"
@@ -69,6 +80,7 @@ sudo systemctl enable nginx
 sudo systemctl reload nginx
 
 echo "==> [7/8] Starting app with PM2"
+pm2 delete tanker-tracker >/dev/null 2>&1 || true
 pm2 start ecosystem.config.js --env production
 pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -1 | sudo bash
 pm2 save
