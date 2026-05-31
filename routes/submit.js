@@ -131,6 +131,14 @@ router.post('/', upload.single('photo'), async (req, res) => {
     console.error('EXIF parse error:', e.message);
   }
 
+  // Client-side compression strips EXIF — fall back to browser-supplied
+  // geolocation so the audit record still has coordinates.
+  if (gpsLat === null && gpsLng === null) {
+    const subLat = parseFloat(submitted_lat);
+    const subLng = parseFloat(submitted_lng);
+    if (!isNaN(subLat) && !isNaN(subLng)) { gpsLat = subLat; gpsLng = subLng; }
+  }
+
   const finalPlate = plate_number?.trim().toUpperCase() || null;
 
   const duplicate = checkDuplicate(vendor_name.trim(), finalPlate, now);

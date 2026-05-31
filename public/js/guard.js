@@ -166,14 +166,63 @@
     photoMeta.classList.remove('hidden');
   }
 
-  function handleFile(file) {
+  // Compress a captured photo client-side: resize to maxDim, re-encode as JPEG.
+  // Cuts a 5 MB camera photo to ~300 KB so submission completes in seconds on
+  // 1 Mbps mobile uplinks. createImageBitmap with imageOrientation honors EXIF
+  // rotation so portrait photos stay upright.
+  async function compressImage(file, maxDim = 1600, quality = 0.75) {
+    let img, isBitmap = false;
+    if (typeof createImageBitmap === 'function') {
+      try {
+        img = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        isBitmap = true;
+      } catch {
+        try { img = await createImageBitmap(file); isBitmap = true; } catch {}
+      }
+    }
+    if (!img) {
+      img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        const url = URL.createObjectURL(file);
+        im.onload  = () => { URL.revokeObjectURL(url); resolve(im); };
+        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+        im.src = url;
+      });
+    }
+    const srcW = isBitmap ? img.width  : img.naturalWidth;
+    const srcH = isBitmap ? img.height : img.naturalHeight;
+    const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+    const w = Math.round(srcW * scale);
+    const h = Math.round(srcH * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    if (isBitmap) img.close();
+
+    return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', quality));
+  }
+
+  async function handleFile(file) {
     if (!file) return;
-    selectedFile = file;
-    const url = URL.createObjectURL(file);
-    photoPreview.src = url;
+    // Show original preview immediately
+    const previewUrl = URL.createObjectURL(file);
+    photoPreview.src = previewUrl;
     photoPreview.classList.remove('hidden');
     placeholder.classList.add('hidden');
-    showMeta({ timestamp: file.lastModified ? new Date(file.lastModified).toISOString() : null, gps: null });
+    photoMeta.classList.remove('hidden');
+    photoMeta.innerHTML = '<span>⏳ Optimising photo…</span>';
+
+    try {
+      const compressed = await compressImage(file);
+      selectedFile = new File([compressed], (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+      const kb = Math.round(selectedFile.size / 1024);
+      photoMeta.innerHTML = `<span>📐 ${kb} KB · ready</span>`;
+    } catch (e) {
+      console.warn('compression failed, sending original', e);
+      selectedFile = file;
+      photoMeta.innerHTML = '<span>⚠️ Could not optimise; sending original</span>';
+    }
     updateSubmitBtn();
   }
 
@@ -212,6 +261,25 @@
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
+  // XHR upload with real progress events (fetch doesn't expose upload progress).
+  function uploadWithProgress(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/submit');
+      xhr.setRequestHeader('X-Device-Id', deviceToken);
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch { data = { error: 'parse_error' }; }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+      };
+      xhr.onerror = () => reject(new Error('network'));
+      xhr.send(formData);
+    });
+  }
+
   async function handleSubmit() {
     btnSubmit.disabled = true;
     btnSubmit.textContent = 'Submitting…';
@@ -228,12 +296,10 @@
     }
 
     try {
-      const resp = await fetch('/api/submit', {
-        method: 'POST',
-        headers: { 'X-Device-Id': deviceToken },
-        body: fd
+      const resp = await uploadWithProgress(fd, pct => {
+        btnSubmit.textContent = pct >= 1 ? 'Processing…' : `Uploading ${Math.round(pct * 100)}%`;
       });
-      const data = await resp.json();
+      const data = resp.data;
 
       if (resp.ok && data.success) {
         saveVendor(vendorInput.value.trim());
