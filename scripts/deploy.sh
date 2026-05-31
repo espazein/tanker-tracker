@@ -1,8 +1,18 @@
 #!/bin/bash
 # Pull latest code, reload the app, and ensure HTTPS is in place.
 # Run from the app directory:  bash scripts/deploy.sh
+#
+# Do NOT run with sudo — PM2 is per-user, so sudo points PM2 at /root/.pm2
+# instead of the ubuntu user's pm2 home where tanker-tracker is registered.
+# The script uses sudo internally where needed (nginx, certbot, apt).
 
 set -euo pipefail
+
+if [[ "$EUID" -eq 0 ]]; then
+  echo "❌  Don't run deploy.sh with sudo. Run as the ubuntu user:"
+  echo "       bash scripts/deploy.sh"
+  exit 1
+fi
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NGINX_CONF="/etc/nginx/sites-available/tanker-tracker"
