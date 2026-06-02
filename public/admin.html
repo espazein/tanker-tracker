@@ -40,6 +40,7 @@
 
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="devices">📱 Devices</button>
+      <button class="tab-btn" data-tab="entries">📋 Entries</button>
       <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
       <button class="tab-btn" data-tab="danger">⚠️ Danger Zone</button>
     </div>
@@ -71,6 +72,22 @@
 
       <div id="devices-list">
         <div class="empty-state">Loading devices…</div>
+      </div>
+    </section>
+
+    <!-- Entries tab -->
+    <section id="tab-entries" class="tab-content card hidden">
+      <div class="card-header">
+        <h2 class="card-title">All Entries</h2>
+        <span id="entries-count" class="hint"></span>
+      </div>
+      <div id="entries-list-admin">
+        <div class="empty-state">Loading…</div>
+      </div>
+      <div id="entries-pager" class="entries-pager hidden">
+        <button class="btn btn-outline btn-sm" id="btn-prev-page">← Prev</button>
+        <span id="page-info"></span>
+        <button class="btn btn-outline btn-sm" id="btn-next-page">Next →</button>
       </div>
     </section>
 

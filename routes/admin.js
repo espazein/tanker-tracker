@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
+
+const UPLOAD_DIR = path.join(__dirname, '../uploads');
 
 function requirePin(req, res, next) {
   const adminPin = process.env.ADMIN_PIN;
@@ -13,6 +17,34 @@ function requirePin(req, res, next) {
 }
 
 // --- Entries ---
+router.get('/entries', requirePin, (req, res) => {
+  const page   = Math.max(1, parseInt(req.query.page) || 1);
+  const limit  = 20;
+  const offset = (page - 1) * limit;
+
+  const entries = db.prepare(`
+    SELECT id, vendor_name, plate_number, plate_auto_detected, exif_timestamp,
+           gps_lat, gps_lng, submitted_at, notes, photo_path, is_duplicate
+    FROM entries ORDER BY submitted_at DESC LIMIT ? OFFSET ?
+  `).all(limit, offset);
+
+  const total = db.prepare('SELECT COUNT(*) as count FROM entries').get().count;
+  res.json({ entries, total, page, limit });
+});
+
+router.delete('/entries/:id', requirePin, (req, res) => {
+  const entry = db.prepare('SELECT * FROM entries WHERE id = ?').get(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+  // Delete photo file (ignore if already missing)
+  if (entry.photo_path) {
+    try { fs.unlinkSync(path.join(UPLOAD_DIR, entry.photo_path)); }
+    catch (e) { if (e.code !== 'ENOENT') console.error('photo delete failed:', e.message); }
+  }
+  db.prepare('DELETE FROM entries WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
 router.post('/truncate', requirePin, (req, res) => {
   const count = db.prepare('SELECT COUNT(*) as count FROM entries').get().count;
   db.exec('DELETE FROM entries');

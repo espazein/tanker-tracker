@@ -63,6 +63,7 @@
       document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
       btn.classList.add('active');
       document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+      if (btn.dataset.tab === 'entries') loadEntries();
     });
   });
 
@@ -169,6 +170,70 @@
       newDeviceResult.classList.remove('hidden');
     }
   });
+
+  // ── Entries ────────────────────────────────────────────────────────────────
+  const entriesListAdmin = document.getElementById('entries-list-admin');
+  const entriesCount     = document.getElementById('entries-count');
+  const entriesPager     = document.getElementById('entries-pager');
+  const btnPrevPage      = document.getElementById('btn-prev-page');
+  const btnNextPage      = document.getElementById('btn-next-page');
+  const pageInfo         = document.getElementById('page-info');
+
+  let entriesPage = 1;
+
+  async function loadEntries() {
+    entriesListAdmin.innerHTML = '<div class="empty-state">Loading…</div>';
+    const r = await apiFetch(`/api/admin/entries?page=${entriesPage}`);
+    const d = await r.json();
+
+    if (!d.entries?.length) {
+      entriesListAdmin.innerHTML = '<div class="empty-state">No entries yet.</div>';
+      entriesCount.textContent = '';
+      entriesPager.classList.add('hidden');
+      return;
+    }
+
+    entriesCount.textContent = `${d.total} total`;
+    entriesListAdmin.innerHTML = d.entries.map(e => {
+      const when = new Date(e.submitted_at).toLocaleString('en-IN',
+        { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return `
+        <div class="entry-admin-row" data-id="${e.id}">
+          ${e.photo_path
+            ? `<img class="entry-admin-thumb" src="/uploads/${escHtml(e.photo_path)}" alt="">`
+            : `<div class="entry-admin-thumb-ph">🚛</div>`}
+          <div class="entry-admin-info">
+            <div class="entry-admin-vendor">${escHtml(e.vendor_name)}</div>
+            <div class="entry-admin-meta">
+              🔢 ${escHtml(e.plate_number || '—')} · ${when}
+              ${e.is_duplicate ? ' · <span class="badge badge-inactive">duplicate</span>' : ''}
+            </div>
+          </div>
+          <button class="btn btn-sm btn-danger" data-action="delete-entry">Delete</button>
+        </div>`;
+    }).join('');
+
+    const totalPages = Math.max(1, Math.ceil(d.total / d.limit));
+    entriesPager.classList.toggle('hidden', totalPages <= 1);
+    btnPrevPage.disabled = entriesPage <= 1;
+    btnNextPage.disabled = entriesPage >= totalPages;
+    pageInfo.textContent = `Page ${entriesPage} of ${totalPages}`;
+  }
+
+  entriesListAdmin.addEventListener('click', async e => {
+    if (e.target.dataset.action !== 'delete-entry') return;
+    const row = e.target.closest('[data-id]');
+    if (!row) return;
+    if (!confirm('Delete this entry? The photo will also be removed permanently.')) return;
+    e.target.disabled = true;
+    e.target.textContent = 'Deleting…';
+    const r = await apiFetch(`/api/admin/entries/${row.dataset.id}`, { method: 'DELETE' });
+    if (r.ok) loadEntries();
+    else { e.target.disabled = false; e.target.textContent = 'Delete'; alert('Failed to delete'); }
+  });
+
+  btnPrevPage.addEventListener('click', () => { if (entriesPage > 1) { entriesPage--; loadEntries(); } });
+  btnNextPage.addEventListener('click', () => { entriesPage++; loadEntries(); });
 
   // ── Geofence ───────────────────────────────────────────────────────────────
   const fenceLat       = document.getElementById('fence-lat');
