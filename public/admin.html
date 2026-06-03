@@ -39,14 +39,57 @@
   <main class="admin-main hidden" id="admin-content">
 
     <div class="tab-bar">
-      <button class="tab-btn active" data-tab="devices">📱 Devices</button>
+      <button class="tab-btn active" data-tab="log">➕ Log Entry</button>
+      <button class="tab-btn" data-tab="devices">📱 Devices</button>
       <button class="tab-btn" data-tab="entries">📋 Entries</button>
       <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
       <button class="tab-btn" data-tab="danger">⚠️ Danger Zone</button>
     </div>
 
+    <!-- Log Entry tab -->
+    <section id="tab-log" class="tab-content card">
+      <h2 class="card-title">Log a Tanker Entry</h2>
+      <p class="help-text" style="margin-bottom:16px">Use this when a guard missed a delivery. You can take a photo or upload from your gallery.</p>
+
+      <div class="field-group">
+        <label>Photo <span class="required">*</span></label>
+        <div id="log-preview-area">
+          <div id="log-placeholder" class="preview-placeholder-mini">
+            <span style="font-size:2rem">📷</span>
+            <p>No photo selected</p>
+          </div>
+          <img id="log-preview" class="log-preview hidden" alt="Tanker preview">
+          <div id="log-photo-meta" class="log-photo-meta hidden"></div>
+        </div>
+        <div class="camera-buttons" style="margin-top:10px">
+          <button class="btn btn-primary" id="btn-log-camera" type="button"><span>📷</span> Take Photo</button>
+          <button class="btn btn-outline" id="btn-log-gallery" type="button"><span>🖼️</span> From Gallery</button>
+        </div>
+        <input type="file" id="log-input-camera"  accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="log-input-gallery" accept="image/*" class="hidden">
+      </div>
+
+      <div class="field-group">
+        <label for="log-vendor">Vendor / Supplier Name <span class="required">*</span></label>
+        <input type="text" id="log-vendor" class="admin-input" placeholder="e.g. Shree Water Suppliers" autocomplete="off">
+      </div>
+
+      <div class="field-group">
+        <label for="log-plate">Number Plate <span class="required">*</span></label>
+        <input type="text" id="log-plate" class="admin-input" placeholder="e.g. MH12AB1234" autocomplete="off" style="text-transform:uppercase">
+      </div>
+
+      <div class="field-group">
+        <label for="log-notes">Notes (optional)</label>
+        <input type="text" id="log-notes" class="admin-input" placeholder="Any additional info">
+      </div>
+
+      <button class="btn btn-success btn-lg" id="btn-log-submit" type="button" disabled>Submit Entry</button>
+      <div id="log-status" class="status-msg hidden" style="margin-top:14px"></div>
+    </section>
+
     <!-- Devices tab -->
-    <section id="tab-devices" class="tab-content card">
+    <section id="tab-devices" class="tab-content card hidden">
       <div class="card-header">
         <h2 class="card-title">Registered Devices</h2>
         <button class="btn btn-primary btn-sm" id="btn-add-device">+ Add Device</button>

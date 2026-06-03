@@ -171,6 +171,119 @@
     }
   });
 
+  // ── Log Entry (admin-side submission) ──────────────────────────────────────
+  const btnLogCamera   = document.getElementById('btn-log-camera');
+  const btnLogGallery  = document.getElementById('btn-log-gallery');
+  const logInputCamera = document.getElementById('log-input-camera');
+  const logInputGallery= document.getElementById('log-input-gallery');
+  const logPreview     = document.getElementById('log-preview');
+  const logPlaceholder = document.getElementById('log-placeholder');
+  const logPhotoMeta   = document.getElementById('log-photo-meta');
+  const logVendor      = document.getElementById('log-vendor');
+  const logPlate       = document.getElementById('log-plate');
+  const logNotes       = document.getElementById('log-notes');
+  const btnLogSubmit   = document.getElementById('btn-log-submit');
+  const logStatus      = document.getElementById('log-status');
+
+  let logSelectedFile = null;
+
+  async function compressImage(file, maxDim = 1600, quality = 0.75) {
+    let img, isBitmap = false;
+    if (typeof createImageBitmap === 'function') {
+      try { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); isBitmap = true; }
+      catch { try { img = await createImageBitmap(file); isBitmap = true; } catch {} }
+    }
+    if (!img) {
+      img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        const url = URL.createObjectURL(file);
+        im.onload  = () => { URL.revokeObjectURL(url); resolve(im); };
+        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+        im.src = url;
+      });
+    }
+    const srcW = isBitmap ? img.width  : img.naturalWidth;
+    const srcH = isBitmap ? img.height : img.naturalHeight;
+    const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+    const w = Math.round(srcW * scale), h = Math.round(srcH * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    if (isBitmap) img.close();
+    return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', quality));
+  }
+
+  async function handleLogFile(file) {
+    if (!file) return;
+    logPreview.src = URL.createObjectURL(file);
+    logPreview.classList.remove('hidden');
+    logPlaceholder.classList.add('hidden');
+    logPhotoMeta.classList.remove('hidden');
+    logPhotoMeta.textContent = '⏳ Optimising photo…';
+    try {
+      const blob = await compressImage(file);
+      logSelectedFile = new File([blob], (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+      logPhotoMeta.textContent = `📐 ${Math.round(logSelectedFile.size / 1024)} KB · ready`;
+    } catch {
+      logSelectedFile = file;
+      logPhotoMeta.textContent = '⚠️ Could not optimise; sending original';
+    }
+    updateLogSubmitBtn();
+  }
+
+  btnLogCamera.addEventListener('click',  () => logInputCamera.click());
+  btnLogGallery.addEventListener('click', () => logInputGallery.click());
+  logInputCamera.addEventListener('change',  e => handleLogFile(e.target.files[0]));
+  logInputGallery.addEventListener('change', e => handleLogFile(e.target.files[0]));
+  [logVendor, logPlate].forEach(el => el.addEventListener('input', updateLogSubmitBtn));
+
+  function updateLogSubmitBtn() {
+    btnLogSubmit.disabled = !(logSelectedFile && logVendor.value.trim() && logPlate.value.trim());
+  }
+
+  btnLogSubmit.addEventListener('click', async () => {
+    btnLogSubmit.disabled = true;
+    btnLogSubmit.textContent = 'Submitting…';
+    logStatus.classList.add('hidden');
+
+    const fd = new FormData();
+    fd.append('photo', logSelectedFile);
+    fd.append('vendor_name', logVendor.value.trim());
+    fd.append('plate_number', logPlate.value.trim().toUpperCase());
+    if (logNotes.value.trim()) fd.append('notes', logNotes.value.trim());
+
+    try {
+      const r = await fetch('/api/admin/entries', {
+        method: 'POST',
+        headers: { 'X-Admin-Pin': adminPin },
+        body: fd
+      });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        showStatus(logStatus, '✅ Entry logged successfully', 'success');
+        resetLogForm();
+      } else {
+        showStatus(logStatus, `❌ ${d.error || 'Failed to log entry'}`, 'error');
+      }
+    } catch {
+      showStatus(logStatus, '❌ Network error — please try again', 'error');
+    }
+
+    btnLogSubmit.disabled = false;
+    btnLogSubmit.textContent = 'Submit Entry';
+    updateLogSubmitBtn();
+  });
+
+  function resetLogForm() {
+    logSelectedFile = null;
+    logPreview.classList.add('hidden');
+    logPlaceholder.classList.remove('hidden');
+    logPhotoMeta.classList.add('hidden');
+    logVendor.value = ''; logPlate.value = ''; logNotes.value = '';
+    logInputCamera.value = ''; logInputGallery.value = '';
+    updateLogSubmitBtn();
+  }
+
   // ── Entries ────────────────────────────────────────────────────────────────
   const entriesListAdmin = document.getElementById('entries-list-admin');
   const entriesCount     = document.getElementById('entries-count');

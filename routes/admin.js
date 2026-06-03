@@ -3,9 +3,22 @@ const router = express.Router();
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
+const exifr = require('exifr');
 const db = require('../db');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename:    (req, file, cb) => cb(null, `tanker_${Date.now()}${path.extname(file.originalname) || '.jpg'}`)
+  }),
+  limits:     { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) =>
+    file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Only image files allowed'))
+});
 
 function requirePin(req, res, next) {
   const adminPin = process.env.ADMIN_PIN;
@@ -43,6 +56,49 @@ router.delete('/entries/:id', requirePin, (req, res) => {
   }
   db.prepare('DELETE FROM entries WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// Admin-created entry. Bypasses device-token + geofence checks (admin is
+// already PIN-authenticated). Photo can be from camera or gallery.
+router.post('/entries', requirePin, upload.single('photo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Photo is required' });
+
+  const { vendor_name, plate_number, notes } = req.body;
+  if (!vendor_name?.trim()) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Vendor name is required' });
+  }
+
+  // EXIF (best-effort)
+  let exifTimestamp = null, gpsLat = null, gpsLng = null;
+  try {
+    const exif = await exifr.parse(req.file.path, {
+      tiff: true, exif: true, gps: true,
+      pick: ['DateTimeOriginal', 'latitude', 'longitude']
+    });
+    if (exif) {
+      if (exif.DateTimeOriginal) exifTimestamp = new Date(exif.DateTimeOriginal).toISOString();
+      if (exif.latitude)  gpsLat = exif.latitude;
+      if (exif.longitude) gpsLng = exif.longitude;
+    }
+  } catch (e) { console.error('EXIF parse error (admin):', e.message); }
+
+  const result = db.prepare(`
+    INSERT INTO entries
+      (vendor_name, plate_number, plate_auto_detected, photo_path,
+       exif_timestamp, gps_lat, gps_lng, submitted_at, notes)
+    VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
+  `).run(
+    vendor_name.trim(),
+    plate_number?.trim().toUpperCase() || null,
+    req.file.filename,
+    exifTimestamp,
+    gpsLat, gpsLng,
+    Date.now(),
+    notes?.trim() || null
+  );
+
+  res.json({ success: true, id: result.lastInsertRowid });
 });
 
 router.post('/truncate', requirePin, (req, res) => {
