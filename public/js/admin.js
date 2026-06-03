@@ -181,6 +181,7 @@
   const logPhotoMeta   = document.getElementById('log-photo-meta');
   const logVendor      = document.getElementById('log-vendor');
   const logPlate       = document.getElementById('log-plate');
+  const logCaptureTime = document.getElementById('log-capture-time');
   const logNotes       = document.getElementById('log-notes');
   const btnLogSubmit   = document.getElementById('btn-log-submit');
   const logStatus      = document.getElementById('log-status');
@@ -188,6 +189,12 @@
   let logSelectedFile = null;
 
   // compressImage is provided by /js/photo.js (preserves EXIF through compression)
+  // Format a Date as the value expected by <input type="datetime-local">
+  function toLocalInputValue(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   async function handleLogFile(file) {
     if (!file) return;
     logPreview.src = URL.createObjectURL(file);
@@ -195,6 +202,18 @@
     logPlaceholder.classList.add('hidden');
     logPhotoMeta.classList.remove('hidden');
     logPhotoMeta.textContent = '⏳ Optimising photo…';
+
+    // Prefill capture-time using the best signal available
+    // 1. EXIF DateTimeOriginal (best — usually present for fresh camera shots)
+    // 2. file.lastModified (iOS Safari preserves this even when EXIF is stripped)
+    // 3. "Now" as ultimate fallback
+    let captureLocal = await readExifCaptureTime(file).catch(() => null);
+    if (!captureLocal && file.lastModified) {
+      captureLocal = toLocalInputValue(new Date(file.lastModified));
+    }
+    if (!captureLocal) captureLocal = toLocalInputValue(new Date());
+    logCaptureTime.value = captureLocal;
+
     try {
       const blob = await compressImage(file);
       logSelectedFile = new File([blob], (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
@@ -225,6 +244,7 @@
     fd.append('photo', logSelectedFile);
     fd.append('vendor_name', logVendor.value.trim());
     fd.append('plate_number', logPlate.value.trim().toUpperCase());
+    if (logCaptureTime.value) fd.append('capture_time', logCaptureTime.value);
     if (logNotes.value.trim()) fd.append('notes', logNotes.value.trim());
 
     try {
@@ -255,6 +275,7 @@
     logPlaceholder.classList.remove('hidden');
     logPhotoMeta.classList.add('hidden');
     logVendor.value = ''; logPlate.value = ''; logNotes.value = '';
+    logCaptureTime.value = '';
     logInputCamera.value = ''; logInputGallery.value = '';
     updateLogSubmitBtn();
   }

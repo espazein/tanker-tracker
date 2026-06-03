@@ -63,13 +63,13 @@ router.delete('/entries/:id', requirePin, (req, res) => {
 router.post('/entries', requirePin, upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Photo is required' });
 
-  const { vendor_name, plate_number, notes } = req.body;
+  const { vendor_name, plate_number, notes, capture_time } = req.body;
   if (!vendor_name?.trim()) {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: 'Vendor name is required' });
   }
 
-  // EXIF (best-effort)
+  // EXIF (best-effort) — may be missing on iOS gallery picks
   let exifTimestamp = null, gpsLat = null, gpsLng = null;
   try {
     const exif = await exifr.parse(req.file.path, {
@@ -82,6 +82,12 @@ router.post('/entries', requirePin, upload.single('photo'), async (req, res) => 
       if (exif.longitude) gpsLng = exif.longitude;
     }
   } catch (e) { console.error('EXIF parse error (admin):', e.message); }
+
+  // Admin's explicit capture-time always wins (datetime-local → ISO)
+  if (capture_time) {
+    const d = new Date(capture_time);
+    if (!isNaN(d.getTime())) exifTimestamp = d.toISOString();
+  }
 
   const result = db.prepare(`
     INSERT INTO entries

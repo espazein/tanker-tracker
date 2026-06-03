@@ -95,5 +95,18 @@
     }
   }
 
-  global.compressImage = compressImage;
+  // Returns "YYYY-MM-DDTHH:MM" (datetime-local format) from EXIF, or null if
+  // the photo has no DateTimeOriginal (e.g. iOS Safari strips it from gallery
+  // picks). Suitable for prefilling an <input type="datetime-local">.
+  async function readExifCaptureTime(file) {
+    const exifObj = await readExif(file);
+    const dt = exifObj?.Exif?.[global.piexif?.ExifIFD?.DateTimeOriginal];
+    if (!dt) return null;
+    // EXIF format: "2024:03:15 14:30:45"
+    const m = String(dt).match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}` : null;
+  }
+
+  global.compressImage       = compressImage;
+  global.readExifCaptureTime = readExifCaptureTime;
 })(window);
