@@ -166,43 +166,7 @@
     photoMeta.classList.remove('hidden');
   }
 
-  // Compress a captured photo client-side: resize to maxDim, re-encode as JPEG.
-  // Cuts a 5 MB camera photo to ~300 KB so submission completes in seconds on
-  // 1 Mbps mobile uplinks. createImageBitmap with imageOrientation honors EXIF
-  // rotation so portrait photos stay upright.
-  async function compressImage(file, maxDim = 1600, quality = 0.75) {
-    let img, isBitmap = false;
-    if (typeof createImageBitmap === 'function') {
-      try {
-        img = await createImageBitmap(file, { imageOrientation: 'from-image' });
-        isBitmap = true;
-      } catch {
-        try { img = await createImageBitmap(file); isBitmap = true; } catch {}
-      }
-    }
-    if (!img) {
-      img = await new Promise((resolve, reject) => {
-        const im = new Image();
-        const url = URL.createObjectURL(file);
-        im.onload  = () => { URL.revokeObjectURL(url); resolve(im); };
-        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
-        im.src = url;
-      });
-    }
-    const srcW = isBitmap ? img.width  : img.naturalWidth;
-    const srcH = isBitmap ? img.height : img.naturalHeight;
-    const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
-    const w = Math.round(srcW * scale);
-    const h = Math.round(srcH * scale);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    if (isBitmap) img.close();
-
-    return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', quality));
-  }
-
+  // compressImage is provided by /js/photo.js (preserves EXIF through compression)
   async function handleFile(file) {
     if (!file) return;
     // Show original preview immediately
