@@ -180,11 +180,33 @@ router.patch('/vendors/:id', requirePin, (req, res) => {
 
   const newActive = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : vendor.is_active;
   const newName   = req.body.name !== undefined ? (req.body.name?.trim() || vendor.name) : vendor.name;
+  const renamed   = newName.toLowerCase() !== vendor.name.toLowerCase() || newName !== vendor.name;
+
+  // Does another vendor already use newName (case-insensitive)? If so, this
+  // becomes a MERGE: delete the source, move its entries to the target's name.
+  const collision = renamed
+    ? db.prepare('SELECT id, name FROM vendors WHERE name = ? COLLATE NOCASE AND id != ?')
+        .get(newName, req.params.id)
+    : null;
+
+  const updateEntries = db.prepare(
+    'UPDATE entries SET vendor_name = ? WHERE vendor_name = ? COLLATE NOCASE'
+  );
 
   try {
-    db.prepare('UPDATE vendors SET is_active = ?, name = ? WHERE id = ?')
-      .run(newActive, newName, req.params.id);
-    res.json({ success: true });
+    let entriesUpdated = 0;
+    db.transaction(() => {
+      if (collision) {
+        // Merge: drop the source vendor row, keep the existing canonical one
+        db.prepare('DELETE FROM vendors WHERE id = ?').run(req.params.id);
+        entriesUpdated = updateEntries.run(collision.name, vendor.name).changes;
+      } else {
+        db.prepare('UPDATE vendors SET is_active = ?, name = ? WHERE id = ?')
+          .run(newActive, newName, req.params.id);
+        if (renamed) entriesUpdated = updateEntries.run(newName, vendor.name).changes;
+      }
+    })();
+    res.json({ success: true, merged: !!collision, entries_updated: entriesUpdated });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'A vendor with this name already exists' });
     throw e;

@@ -507,12 +507,19 @@
       loadVendors(); loadVendorsForDropdown();
     } else if (action === 'rename') {
       const original = row.querySelector('.vendor-name-editable').dataset.original;
-      const newName = prompt('Rename vendor:', original);
+      const newName = prompt(
+        'Rename vendor:\n\nIf a vendor with this name already exists, the two will be merged and existing entries updated.',
+        original
+      );
       if (!newName || newName.trim() === original) return;
       const r = await apiFetch(`/api/admin/vendors/${id}`, { method: 'PATCH', body: JSON.stringify({ name: newName.trim() }) });
+      const d = await r.json();
       if (!r.ok) {
-        const d = await r.json();
         alert(d.error || 'Rename failed');
+      } else if (d.merged) {
+        alert(`Merged into existing vendor. ${d.entries_updated} entr${d.entries_updated === 1 ? 'y' : 'ies'} updated.`);
+      } else if (d.entries_updated) {
+        alert(`Renamed. ${d.entries_updated} entr${d.entries_updated === 1 ? 'y' : 'ies'} also updated.`);
       }
       loadVendors(); loadVendorsForDropdown();
     }
