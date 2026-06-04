@@ -50,6 +50,14 @@ const deviceCheckLimiter = rateLimit({
   message: { error: 'rate_limited' }
 });
 
+// Active vendor list — used to populate dropdowns in guard & admin forms.
+app.get('/api/vendors', dashboardLimiter, (req, res) => {
+  const vendors = db.prepare(
+    'SELECT id, name FROM vendors WHERE is_active = 1 ORDER BY name COLLATE NOCASE ASC'
+  ).all();
+  res.json({ vendors });
+});
+
 // Lightweight device validation for the guard page
 app.get('/api/device/check', deviceCheckLimiter, (req, res) => {
   const deviceId = req.headers['x-device-id'];

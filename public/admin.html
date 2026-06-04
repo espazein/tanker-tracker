@@ -41,6 +41,7 @@
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="log">➕ Log Entry</button>
       <button class="tab-btn" data-tab="devices">📱 Devices</button>
+      <button class="tab-btn" data-tab="vendors">🏷️ Vendors</button>
       <button class="tab-btn" data-tab="entries">📋 Entries</button>
       <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
       <button class="tab-btn" data-tab="danger">⚠️ Danger Zone</button>
@@ -70,8 +71,10 @@
       </div>
 
       <div class="field-group">
-        <label for="log-vendor">Vendor / Supplier Name <span class="required">*</span></label>
-        <input type="text" id="log-vendor" class="admin-input" placeholder="e.g. Shree Water Suppliers" autocomplete="off">
+        <label for="log-vendor">Vendor / Supplier <span class="required">*</span></label>
+        <select id="log-vendor" class="admin-input">
+          <option value="">Loading vendors…</option>
+        </select>
       </div>
 
       <div class="field-group">
@@ -123,6 +126,31 @@
 
       <div id="devices-list">
         <div class="empty-state">Loading devices…</div>
+      </div>
+    </section>
+
+    <!-- Vendors tab -->
+    <section id="tab-vendors" class="tab-content card hidden">
+      <div class="card-header">
+        <h2 class="card-title">Vendors</h2>
+        <button class="btn btn-primary btn-sm" id="btn-add-vendor">+ Add Vendor</button>
+      </div>
+      <p class="help-text">Guards select a vendor from this list when logging entries. Names are case-insensitive — "Kaveri" and "kaveri" count as the same.</p>
+
+      <div id="add-vendor-form" class="add-device-form hidden">
+        <div class="field-group">
+          <label>Vendor Name</label>
+          <input type="text" id="new-vendor-name" class="admin-input" placeholder="e.g. Shree Water Suppliers">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" id="btn-save-vendor">Create</button>
+          <button class="btn btn-outline" id="btn-cancel-vendor">Cancel</button>
+        </div>
+        <div id="new-vendor-result" class="new-device-result hidden"></div>
+      </div>
+
+      <div id="vendors-list">
+        <div class="empty-state">Loading vendors…</div>
       </div>
     </section>
 

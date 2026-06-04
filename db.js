@@ -35,6 +35,13 @@ db.exec(`
     created_at INTEGER NOT NULL,
     is_active  INTEGER DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS vendors (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    is_active  INTEGER DEFAULT 1,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 module.exports = db;

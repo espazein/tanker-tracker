@@ -64,6 +64,7 @@
       btn.classList.add('active');
       document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
       if (btn.dataset.tab === 'entries') loadEntries();
+      if (btn.dataset.tab === 'vendors') loadVendors();
     });
   });
 
@@ -431,5 +432,122 @@
   function loadAll() {
     loadDevices();
     loadSettings();
+    loadVendorsForDropdown();  // populate Log Entry dropdown on unlock
   }
+
+  // Populate the Log Entry vendor <select> from /api/vendors (public endpoint)
+  async function loadVendorsForDropdown() {
+    try {
+      const r = await fetch('/api/vendors');
+      const d = await r.json();
+      const opts = ['<option value="">Select a vendor…</option>']
+        .concat((d.vendors || []).map(v => `<option value="${escHtml(v.name)}">${escHtml(v.name)}</option>`));
+      logVendor.innerHTML = opts.join('');
+      if (!d.vendors?.length) {
+        logVendor.innerHTML = '<option value="">No vendors yet — add one in the Vendors tab</option>';
+      }
+    } catch {
+      logVendor.innerHTML = '<option value="">Could not load vendors</option>';
+    }
+  }
+
+  // ── Vendors (admin CRUD) ───────────────────────────────────────────────────
+  const vendorsList     = document.getElementById('vendors-list');
+  const btnAddVendor    = document.getElementById('btn-add-vendor');
+  const addVendorForm   = document.getElementById('add-vendor-form');
+  const newVendorName   = document.getElementById('new-vendor-name');
+  const btnSaveVendor   = document.getElementById('btn-save-vendor');
+  const btnCancelVendor = document.getElementById('btn-cancel-vendor');
+  const newVendorResult = document.getElementById('new-vendor-result');
+
+  async function loadVendors() {
+    vendorsList.innerHTML = '<div class="empty-state">Loading…</div>';
+    const r = await apiFetch('/api/admin/vendors');
+    const d = await r.json();
+    if (!d.vendors?.length) {
+      vendorsList.innerHTML = '<div class="empty-state">No vendors yet. Add one to populate the dropdowns.</div>';
+      return;
+    }
+    vendorsList.innerHTML = d.vendors.map(v => `
+      <div class="device-row ${v.is_active ? '' : 'inactive'}" data-id="${v.id}">
+        <div class="device-info-block">
+          <div class="device-name vendor-name-editable" data-original="${escHtml(v.name)}">${escHtml(v.name)}</div>
+          <div class="device-meta">
+            Added ${timeAgo(v.created_at)} ·
+            ${v.is_active
+              ? '<span class="badge badge-active">Active</span>'
+              : '<span class="badge badge-inactive">Inactive</span>'}
+          </div>
+        </div>
+        <div class="device-actions">
+          <button class="btn btn-sm btn-outline" data-action="rename">Rename</button>
+          <button class="btn btn-sm ${v.is_active ? 'btn-outline' : 'btn-success'}"
+                  data-action="toggle" data-active="${v.is_active}">
+            ${v.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+          <button class="btn btn-sm btn-danger" data-action="delete">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  vendorsList.addEventListener('click', async e => {
+    const row = e.target.closest('[data-id]');
+    if (!row) return;
+    const id = row.dataset.id;
+    const action = e.target.dataset.action;
+
+    if (action === 'toggle') {
+      const active = e.target.dataset.active === '1';
+      await apiFetch(`/api/admin/vendors/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active: active ? 0 : 1 }) });
+      loadVendors(); loadVendorsForDropdown();
+    } else if (action === 'delete') {
+      if (!confirm('Delete this vendor? Existing entries that used this name are not affected.')) return;
+      await apiFetch(`/api/admin/vendors/${id}`, { method: 'DELETE' });
+      loadVendors(); loadVendorsForDropdown();
+    } else if (action === 'rename') {
+      const original = row.querySelector('.vendor-name-editable').dataset.original;
+      const newName = prompt('Rename vendor:', original);
+      if (!newName || newName.trim() === original) return;
+      const r = await apiFetch(`/api/admin/vendors/${id}`, { method: 'PATCH', body: JSON.stringify({ name: newName.trim() }) });
+      if (!r.ok) {
+        const d = await r.json();
+        alert(d.error || 'Rename failed');
+      }
+      loadVendors(); loadVendorsForDropdown();
+    }
+  });
+
+  btnAddVendor.addEventListener('click', () => {
+    addVendorForm.classList.toggle('hidden');
+    newVendorResult.classList.add('hidden');
+    if (!addVendorForm.classList.contains('hidden')) newVendorName.focus();
+  });
+
+  btnCancelVendor.addEventListener('click', () => {
+    addVendorForm.classList.add('hidden');
+    newVendorName.value = '';
+    newVendorResult.classList.add('hidden');
+  });
+
+  btnSaveVendor.addEventListener('click', async () => {
+    const name = newVendorName.value.trim();
+    if (!name) { newVendorName.focus(); return; }
+    btnSaveVendor.disabled = true;
+    const r = await apiFetch('/api/admin/vendors', { method: 'POST', body: JSON.stringify({ name }) });
+    const d = await r.json();
+    btnSaveVendor.disabled = false;
+    if (r.ok) {
+      newVendorName.value = '';
+      addVendorForm.classList.add('hidden');
+      loadVendors(); loadVendorsForDropdown();
+    } else {
+      newVendorResult.className = 'new-device-result error';
+      newVendorResult.textContent = d.error || 'Failed to add vendor';
+      newVendorResult.classList.remove('hidden');
+    }
+  });
+
+  newVendorName.addEventListener('keydown', e => { if (e.key === 'Enter') btnSaveVendor.click(); });
+
 })();

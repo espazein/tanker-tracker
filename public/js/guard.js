@@ -1,6 +1,5 @@
 (() => {
   const DEVICE_TOKEN_KEY = 'tanker_device_token';
-  const KNOWN_VENDORS_KEY = 'tanker_vendors';
 
   // ── Activation screen ──────────────────────────────────────────────────────
   const activationScreen = document.getElementById('activation-screen');
@@ -134,8 +133,7 @@
   const photoPreview = document.getElementById('photo-preview');
   const placeholder  = document.getElementById('preview-placeholder');
   const photoMeta    = document.getElementById('photo-meta');
-  const vendorInput  = document.getElementById('vendor-name');
-  const vendorSugg   = document.getElementById('vendor-suggestions');
+  const vendorInput  = document.getElementById('vendor-name'); // <select>
   const plateInput   = document.getElementById('plate-number');
   const notesInput   = document.getElementById('notes');
   const btnSubmit    = document.getElementById('btn-submit');
@@ -143,15 +141,25 @@
 
   let selectedFile = null;
 
-  function getKnownVendors() {
-    try { return JSON.parse(localStorage.getItem(KNOWN_VENDORS_KEY) || '[]'); }
-    catch { return []; }
+  // Populate the vendor <select> from the server
+  async function loadVendors() {
+    try {
+      const r = await fetch('/api/vendors');
+      const d = await r.json();
+      if (d.vendors?.length) {
+        vendorInput.innerHTML = '<option value="">Select a vendor…</option>' +
+          d.vendors.map(v => `<option value="${escAttr(v.name)}">${escHtml(v.name)}</option>`).join('');
+      } else {
+        vendorInput.innerHTML = '<option value="">No vendors configured</option>';
+      }
+    } catch {
+      vendorInput.innerHTML = '<option value="">Could not load vendors</option>';
+    }
+    updateSubmitBtn();
   }
-  function saveVendor(name) {
-    const list = getKnownVendors().filter(v => v !== name);
-    list.unshift(name);
-    localStorage.setItem(KNOWN_VENDORS_KEY, JSON.stringify(list.slice(0, 20)));
-  }
+  function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  loadVendors();
 
   function formatTs(ts) {
     return new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -193,31 +201,7 @@
   btnCamera.addEventListener('click', () => inputCamera.click());
   inputCamera.addEventListener('change', e => handleFile(e.target.files[0]));
 
-  // ── Vendor autocomplete ────────────────────────────────────────────────────
-  vendorInput.addEventListener('input', () => {
-    const val = vendorInput.value.trim().toLowerCase();
-    const list = getKnownVendors().filter(v => v.toLowerCase().includes(val) && val.length > 0);
-    if (list.length) {
-      vendorSugg.innerHTML = list.map(v => `<div class="suggestion-item">${v}</div>`).join('');
-      vendorSugg.classList.remove('hidden');
-    } else {
-      vendorSugg.classList.add('hidden');
-    }
-    updateSubmitBtn();
-  });
-
-  vendorSugg.addEventListener('click', e => {
-    if (e.target.classList.contains('suggestion-item')) {
-      vendorInput.value = e.target.textContent;
-      vendorSugg.classList.add('hidden');
-      updateSubmitBtn();
-    }
-  });
-
-  document.addEventListener('click', e => {
-    if (!vendorSugg.contains(e.target) && e.target !== vendorInput) vendorSugg.classList.add('hidden');
-  });
-
+  vendorInput.addEventListener('change', updateSubmitBtn);
   plateInput.addEventListener('input', updateSubmitBtn);
 
   function updateSubmitBtn() {
@@ -266,7 +250,6 @@
       const data = resp.data;
 
       if (resp.ok && data.success) {
-        saveVendor(vendorInput.value.trim());
         if (data.exif_timestamp) showMeta({ timestamp: data.exif_timestamp, gps: data.gps });
         showResult('success', '✅ Entry Logged!',
           `Tanker from <strong>${vendorInput.value.trim()}</strong> has been recorded.`, data);

@@ -151,6 +151,52 @@ router.delete('/devices/:id', requirePin, (req, res) => {
   res.json({ success: true });
 });
 
+// --- Vendors ---
+router.get('/vendors', requirePin, (req, res) => {
+  const vendors = db.prepare(
+    'SELECT * FROM vendors ORDER BY is_active DESC, name COLLATE NOCASE ASC'
+  ).all();
+  res.json({ vendors });
+});
+
+router.post('/vendors', requirePin, (req, res) => {
+  const name = req.body?.name?.trim();
+  if (!name) return res.status(400).json({ error: 'Vendor name is required' });
+  try {
+    const result = db.prepare(
+      'INSERT INTO vendors (name, created_at) VALUES (?, ?)'
+    ).run(name, Date.now());
+    const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(result.lastInsertRowid);
+    res.json({ success: true, vendor });
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Vendor already exists' });
+    throw e;
+  }
+});
+
+router.patch('/vendors/:id', requirePin, (req, res) => {
+  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
+  if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+  const newActive = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : vendor.is_active;
+  const newName   = req.body.name !== undefined ? (req.body.name?.trim() || vendor.name) : vendor.name;
+
+  try {
+    db.prepare('UPDATE vendors SET is_active = ?, name = ? WHERE id = ?')
+      .run(newActive, newName, req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'A vendor with this name already exists' });
+    throw e;
+  }
+});
+
+router.delete('/vendors/:id', requirePin, (req, res) => {
+  const r = db.prepare('DELETE FROM vendors WHERE id = ?').run(req.params.id);
+  if (!r.changes) return res.status(404).json({ error: 'Vendor not found' });
+  res.json({ success: true });
+});
+
 // --- Settings ---
 router.get('/settings', requirePin, (req, res) => {
   const rows = db.prepare('SELECT key, value FROM settings').all();
