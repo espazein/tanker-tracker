@@ -303,10 +303,23 @@
       return;
     }
 
+    const fmt = ts => new Date(ts).toLocaleString('en-IN',
+      { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
     entriesCount.textContent = `${d.total} total`;
     entriesListAdmin.innerHTML = d.entries.map(e => {
-      const when = new Date(e.submitted_at).toLocaleString('en-IN',
-        { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      // Prefer the photo's actual capture time (matches dashboard). Fall back
+      // to submitted_at when no EXIF was available.
+      const captureTs   = e.exif_timestamp || e.submitted_at;
+      const captureIcon = e.exif_timestamp ? '📷 ' : '🕐 ';
+      // If capture and submission differ by >5 min, surface the submission
+      // time too — useful for admin to spot backdated or delayed entries.
+      const drift = e.exif_timestamp
+        ? Math.abs(new Date(e.exif_timestamp).getTime() - e.submitted_at)
+        : 0;
+      const submittedNote = drift > 5 * 60 * 1000
+        ? ` <span class="muted">· logged ${fmt(e.submitted_at)}</span>`
+        : '';
       return `
         <div class="entry-admin-row" data-id="${e.id}">
           ${e.photo_path
@@ -315,7 +328,7 @@
           <div class="entry-admin-info">
             <div class="entry-admin-vendor">${escHtml(e.vendor_name)}</div>
             <div class="entry-admin-meta">
-              🔢 ${escHtml(e.plate_number || '—')} · ${when}
+              🔢 ${escHtml(e.plate_number || '—')} · ${captureIcon}${fmt(captureTs)}${submittedNote}
               ${e.is_duplicate ? ' · <span class="badge badge-inactive">duplicate</span>' : ''}
             </div>
           </div>

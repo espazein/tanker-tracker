@@ -124,6 +124,7 @@
 .entry-admin-info  { flex: 1; min-width: 0; }
 .entry-admin-vendor { font-weight: 700; font-size: .9rem; margin-bottom: 2px; }
 .entry-admin-meta   { font-size: .8rem; color: var(--gray-500); }
+.entry-admin-meta .muted { color: var(--gray-400); }
 
 .entries-pager {
   display: flex; gap: 12px; align-items: center; justify-content: center;
