@@ -28,6 +28,10 @@ module.exports = {
     max_memory_restart: '256M',
     env_production: {
       NODE_ENV:     'production',
+      // EXIF stores naive local time; this makes Node interpret it as IST
+      // so toISOString() correctly converts to UTC. Also affects SQLite's
+      // date(..., 'localtime') aggregations on the dashboard.
+      TZ:           env.TZ           || 'Asia/Kolkata',
       PORT:         env.PORT         || 3000,
       ADMIN_PIN:    env.ADMIN_PIN,
       SOCIETY_NAME: env.SOCIETY_NAME || 'My Society'
