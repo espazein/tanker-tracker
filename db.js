@@ -42,6 +42,19 @@ db.exec(`
     is_active  INTEGER DEFAULT 1,
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    role        TEXT NOT NULL,
+    actor       TEXT,
+    action      TEXT NOT NULL,
+    target_type TEXT,
+    target_id   TEXT,
+    details     TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 `);
 
 module.exports = db;

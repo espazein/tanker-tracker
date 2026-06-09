@@ -20,17 +20,65 @@ const upload = multer({
     file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Only image files allowed'))
 });
 
-function requirePin(req, res, next) {
-  const adminPin = process.env.ADMIN_PIN;
-  if (!adminPin) return res.status(500).json({ error: 'ADMIN_PIN not configured' });
+// Resolve a PIN to a role. ADMIN_PIN → 'admin', MEMBER_PIN → 'member'.
+function resolveRole(pin) {
+  if (!pin) return null;
+  if (process.env.ADMIN_PIN  && pin === process.env.ADMIN_PIN)  return 'admin';
+  if (process.env.MEMBER_PIN && pin === process.env.MEMBER_PIN) return 'member';
+  return null;
+}
+
+// Authenticate as either admin or member. Sets req.role and req.actor.
+function requireAuth(req, res, next) {
+  if (!process.env.ADMIN_PIN) return res.status(500).json({ error: 'ADMIN_PIN not configured' });
   const pin = req.headers['x-admin-pin'] || req.body?.pin;
   if (!pin) return res.status(401).json({ error: 'Authentication required' });
-  if (pin !== adminPin) return res.status(403).json({ error: 'Invalid PIN' });
+  const role = resolveRole(pin);
+  if (!role) return res.status(403).json({ error: 'Invalid PIN' });
+  req.role = role;
+  req.actor = (req.headers['x-actor'] || '').toString().trim().slice(0, 60) || null;
   next();
 }
 
+// Gate actions reserved for administrators (delete data, wipe, geofence).
+function requireAdmin(req, res, next) {
+  if (req.role !== 'admin') {
+    return res.status(403).json({ error: 'forbidden', message: 'This action is restricted to administrators.' });
+  }
+  next();
+}
+
+// Record a member's mutating action. Per config, only member actions are
+// audited; admin actions are not logged.
+function audit(req, { action, targetType = null, targetId = null, details = null }) {
+  if (req.role !== 'member') return;
+  try {
+    db.prepare(`
+      INSERT INTO audit_log (role, actor, action, target_type, target_id, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(req.role, req.actor, action, targetType, targetId != null ? String(targetId) : null, details, Date.now());
+  } catch (e) {
+    console.error('audit log failed:', e.message);
+  }
+}
+
+// Current session info — lets the frontend tailor the UI to the role.
+router.get('/session', requireAuth, (req, res) => {
+  res.json({ role: req.role, actor: req.actor });
+});
+
+// Audit log viewer — admin only.
+router.get('/audit', requireAuth, requireAdmin, (req, res) => {
+  const page   = Math.max(1, parseInt(req.query.page) || 1);
+  const limit  = 30;
+  const offset = (page - 1) * limit;
+  const logs  = db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+  const total = db.prepare('SELECT COUNT(*) as count FROM audit_log').get().count;
+  res.json({ logs, total, page, limit });
+});
+
 // --- Entries ---
-router.get('/entries', requirePin, (req, res) => {
+router.get('/entries', requireAuth, (req, res) => {
   const page   = Math.max(1, parseInt(req.query.page) || 1);
   const limit  = 20;
   const offset = (page - 1) * limit;
@@ -45,7 +93,7 @@ router.get('/entries', requirePin, (req, res) => {
   res.json({ entries, total, page, limit });
 });
 
-router.delete('/entries/:id', requirePin, (req, res) => {
+router.delete('/entries/:id', requireAuth, requireAdmin, (req, res) => {
   const entry = db.prepare('SELECT * FROM entries WHERE id = ?').get(req.params.id);
   if (!entry) return res.status(404).json({ error: 'Entry not found' });
 
@@ -60,7 +108,7 @@ router.delete('/entries/:id', requirePin, (req, res) => {
 
 // Admin-created entry. Bypasses device-token + geofence checks (admin is
 // already PIN-authenticated). Photo can be from camera or gallery.
-router.post('/entries', requirePin, upload.single('photo'), async (req, res) => {
+router.post('/entries', requireAuth, upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Photo is required' });
 
   const { vendor_name, plate_number, notes, capture_time } = req.body;
@@ -83,12 +131,14 @@ router.post('/entries', requirePin, upload.single('photo'), async (req, res) => 
     }
   } catch (e) { console.error('EXIF parse error (admin):', e.message); }
 
-  // Admin's explicit capture-time always wins (datetime-local → ISO)
-  if (capture_time) {
+  // Only admins may override the capture timestamp. Members must use the
+  // timestamp derived from the photo (EXIF) — they cannot backdate entries.
+  if (capture_time && req.role === 'admin') {
     const d = new Date(capture_time);
     if (!isNaN(d.getTime())) exifTimestamp = d.toISOString();
   }
 
+  const finalPlate = plate_number?.trim().toUpperCase() || null;
   const result = db.prepare(`
     INSERT INTO entries
       (vendor_name, plate_number, plate_auto_detected, photo_path,
@@ -96,7 +146,7 @@ router.post('/entries', requirePin, upload.single('photo'), async (req, res) => 
     VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)
   `).run(
     vendor_name.trim(),
-    plate_number?.trim().toUpperCase() || null,
+    finalPlate,
     req.file.filename,
     exifTimestamp,
     gpsLat, gpsLng,
@@ -104,22 +154,29 @@ router.post('/entries', requirePin, upload.single('photo'), async (req, res) => 
     notes?.trim() || null
   );
 
+  audit(req, {
+    action: 'create_entry',
+    targetType: 'entry',
+    targetId: result.lastInsertRowid,
+    details: `${vendor_name.trim()} / ${finalPlate || 'no plate'}`
+  });
+
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
-router.post('/truncate', requirePin, (req, res) => {
+router.post('/truncate', requireAuth, requireAdmin, (req, res) => {
   const count = db.prepare('SELECT COUNT(*) as count FROM entries').get().count;
   db.exec('DELETE FROM entries');
   res.json({ success: true, message: `Deleted ${count} entries` });
 });
 
 // --- Devices ---
-router.get('/devices', requirePin, (req, res) => {
+router.get('/devices', requireAuth, (req, res) => {
   const devices = db.prepare('SELECT * FROM devices ORDER BY created_at DESC').all();
   res.json({ devices });
 });
 
-router.post('/devices', requirePin, (req, res) => {
+router.post('/devices', requireAuth, (req, res) => {
   const { label, device_id } = req.body;
   const id = device_id?.trim() || crypto.randomUUID();
   try {
@@ -127,6 +184,7 @@ router.post('/devices', requirePin, (req, res) => {
       'INSERT INTO devices (device_id, label, created_at) VALUES (?, ?, ?)'
     ).run(id, label?.trim() || null, Date.now());
     const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(result.lastInsertRowid);
+    audit(req, { action: 'create_device', targetType: 'device', targetId: device.id, details: device.label || device.device_id });
     res.json({ success: true, device });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Device ID already registered' });
@@ -134,7 +192,7 @@ router.post('/devices', requirePin, (req, res) => {
   }
 });
 
-router.patch('/devices/:id', requirePin, (req, res) => {
+router.patch('/devices/:id', requireAuth, (req, res) => {
   const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
 
@@ -142,24 +200,30 @@ router.patch('/devices/:id', requirePin, (req, res) => {
   const newLabel  = req.body.label !== undefined ? (req.body.label?.trim() || null) : device.label;
 
   db.prepare('UPDATE devices SET is_active = ?, label = ? WHERE id = ?').run(newActive, newLabel, req.params.id);
+  audit(req, {
+    action: newActive !== device.is_active ? (newActive ? 'activate_device' : 'deactivate_device') : 'update_device',
+    targetType: 'device', targetId: device.id, details: newLabel || device.device_id
+  });
   res.json({ success: true });
 });
 
-router.delete('/devices/:id', requirePin, (req, res) => {
+router.delete('/devices/:id', requireAuth, (req, res) => {
+  const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(req.params.id);
   const r = db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Device not found' });
+  audit(req, { action: 'delete_device', targetType: 'device', targetId: req.params.id, details: device?.label || device?.device_id || null });
   res.json({ success: true });
 });
 
 // --- Vendors ---
-router.get('/vendors', requirePin, (req, res) => {
+router.get('/vendors', requireAuth, (req, res) => {
   const vendors = db.prepare(
     'SELECT * FROM vendors ORDER BY is_active DESC, name COLLATE NOCASE ASC'
   ).all();
   res.json({ vendors });
 });
 
-router.post('/vendors', requirePin, (req, res) => {
+router.post('/vendors', requireAuth, (req, res) => {
   const name = req.body?.name?.trim();
   if (!name) return res.status(400).json({ error: 'Vendor name is required' });
   try {
@@ -167,6 +231,7 @@ router.post('/vendors', requirePin, (req, res) => {
       'INSERT INTO vendors (name, created_at) VALUES (?, ?)'
     ).run(name, Date.now());
     const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(result.lastInsertRowid);
+    audit(req, { action: 'create_vendor', targetType: 'vendor', targetId: vendor.id, details: vendor.name });
     res.json({ success: true, vendor });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Vendor already exists' });
@@ -174,7 +239,7 @@ router.post('/vendors', requirePin, (req, res) => {
   }
 });
 
-router.patch('/vendors/:id', requirePin, (req, res) => {
+router.patch('/vendors/:id', requireAuth, (req, res) => {
   const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
   if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
 
@@ -206,6 +271,11 @@ router.patch('/vendors/:id', requirePin, (req, res) => {
         if (renamed) entriesUpdated = updateEntries.run(newName, vendor.name).changes;
       }
     })();
+    audit(req, {
+      action: collision ? 'merge_vendor' : 'update_vendor',
+      targetType: 'vendor', targetId: req.params.id,
+      details: collision ? `${vendor.name} → ${collision.name} (${entriesUpdated} entries)` : `${vendor.name} → ${newName}`
+    });
     res.json({ success: true, merged: !!collision, entries_updated: entriesUpdated });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'A vendor with this name already exists' });
@@ -213,19 +283,21 @@ router.patch('/vendors/:id', requirePin, (req, res) => {
   }
 });
 
-router.delete('/vendors/:id', requirePin, (req, res) => {
+router.delete('/vendors/:id', requireAuth, (req, res) => {
+  const vendor = db.prepare('SELECT * FROM vendors WHERE id = ?').get(req.params.id);
   const r = db.prepare('DELETE FROM vendors WHERE id = ?').run(req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Vendor not found' });
+  audit(req, { action: 'delete_vendor', targetType: 'vendor', targetId: req.params.id, details: vendor?.name || null });
   res.json({ success: true });
 });
 
 // --- Settings ---
-router.get('/settings', requirePin, (req, res) => {
+router.get('/settings', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   res.json({ settings: Object.fromEntries(rows.map(r => [r.key, r.value])) });
 });
 
-router.post('/settings', requirePin, (req, res) => {
+router.post('/settings', requireAuth, requireAdmin, (req, res) => {
   const allowed = ['geofence_lat', 'geofence_lng', 'geofence_radius_m'];
   const upsert = db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
@@ -236,7 +308,7 @@ router.post('/settings', requirePin, (req, res) => {
   res.json({ success: true });
 });
 
-router.delete('/settings/geofence', requirePin, (req, res) => {
+router.delete('/settings/geofence', requireAuth, requireAdmin, (req, res) => {
   db.exec("DELETE FROM settings WHERE key IN ('geofence_lat','geofence_lng','geofence_radius_m')");
   res.json({ success: true });
 });

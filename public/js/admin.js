@@ -1,37 +1,65 @@
 (() => {
-  let adminPin = sessionStorage.getItem('admin_pin') || '';
+  let adminPin   = sessionStorage.getItem('admin_pin') || '';
+  let actorName  = sessionStorage.getItem('actor_name') || '';
+  let currentRole = '';
 
   const pinScreen    = document.getElementById('pin-screen');
   const adminContent = document.getElementById('admin-content');
   const pinInput     = document.getElementById('pin-input');
+  const actorInput   = document.getElementById('actor-name');
   const btnPinSubmit = document.getElementById('btn-pin-submit');
   const pinError     = document.getElementById('pin-error');
+  const roleBadge    = document.getElementById('role-badge');
+  const panelTitle   = document.getElementById('panel-title');
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   function apiFetch(path, opts = {}) {
     const headers = { 'X-Admin-Pin': adminPin, ...(opts.headers || {}) };
+    if (actorName) headers['X-Actor'] = actorName;
     if (opts.body) headers['Content-Type'] = 'application/json';
     return fetch(path, { ...opts, headers });
   }
 
-  async function tryUnlock(pin) {
-    const r = await fetch('/api/admin/settings', { headers: { 'X-Admin-Pin': pin } });
-    return r.status !== 401 && r.status !== 403 && r.status !== 500;
+  // Returns the role string ('admin'|'member') or null if the PIN is invalid.
+  async function checkSession(pin, name) {
+    const headers = { 'X-Admin-Pin': pin };
+    if (name) headers['X-Actor'] = name;
+    const r = await fetch('/api/admin/session', { headers });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.role || null;
+  }
+
+  function enterPanel(role) {
+    currentRole = role;
+    pinScreen.classList.add('hidden');
+    adminContent.classList.remove('hidden');
+    applyRolePermissions(role);
+    loadAll();
   }
 
   async function unlock() {
-    const pin = pinInput.value.trim();
+    const pin  = pinInput.value.trim();
+    const name = actorInput.value.trim();
     if (!pin) return;
     btnPinSubmit.disabled = true;
     btnPinSubmit.textContent = 'Checking…';
     pinError.classList.add('hidden');
 
-    if (await tryUnlock(pin)) {
+    const role = await checkSession(pin, name);
+    if (role) {
       adminPin = pin;
+      actorName = role === 'member' ? name : ''; // name only meaningful for members
       sessionStorage.setItem('admin_pin', pin);
-      pinScreen.classList.add('hidden');
-      adminContent.classList.remove('hidden');
-      loadAll();
+      sessionStorage.setItem('actor_name', actorName);
+      if (role === 'member' && !name) {
+        pinError.textContent = 'Please enter your name so your actions can be attributed.';
+        pinError.classList.remove('hidden');
+        btnPinSubmit.disabled = false;
+        btnPinSubmit.textContent = 'Unlock';
+        return;
+      }
+      enterPanel(role);
     } else {
       pinError.textContent = 'Invalid PIN. Try again.';
       pinError.classList.remove('hidden');
@@ -42,18 +70,45 @@
 
   btnPinSubmit.addEventListener('click', unlock);
   pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+  actorInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+
+  roleBadge.addEventListener('click', () => {
+    if (!confirm('Sign out?')) return;
+    sessionStorage.removeItem('admin_pin');
+    sessionStorage.removeItem('actor_name');
+    location.reload();
+  });
 
   if (adminPin) {
-    tryUnlock(adminPin).then(ok => {
-      if (ok) {
-        pinScreen.classList.add('hidden');
-        adminContent.classList.remove('hidden');
-        loadAll();
-      } else {
-        sessionStorage.removeItem('admin_pin');
-        adminPin = '';
-      }
+    checkSession(adminPin, actorName).then(role => {
+      if (role) enterPanel(role);
+      else { sessionStorage.removeItem('admin_pin'); adminPin = ''; }
     });
+  }
+
+  // Tailor the panel to the role. Members get a restricted view.
+  function applyRolePermissions(role) {
+    const isMember = role === 'member';
+
+    roleBadge.classList.remove('hidden');
+    roleBadge.textContent = isMember ? `👤 Member: ${actorName || '—'}` : '🛡️ Admin';
+    roleBadge.classList.toggle('member', isMember);
+    panelTitle.textContent = isMember ? 'General Body Panel' : 'Admin Panel';
+
+    // Hide admin-only tabs (Audit, Danger Zone) for members
+    document.querySelectorAll('.tab-btn[data-admin-only]').forEach(btn => {
+      btn.classList.toggle('hidden', isMember);
+    });
+
+    // Members cannot set a custom capture time
+    document.getElementById('log-capture-time-group').classList.toggle('hidden', isMember);
+
+    // Geofence is read-only for members (they may view, not change)
+    ['fence-lat', 'fence-lng', 'fence-radius'].forEach(id => {
+      document.getElementById(id).disabled = isMember;
+    });
+    document.getElementById('btn-save-geofence').classList.toggle('hidden', isMember);
+    document.getElementById('btn-clear-geofence').classList.toggle('hidden', isMember);
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -65,6 +120,7 @@
       document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
       if (btn.dataset.tab === 'entries') loadEntries();
       if (btn.dataset.tab === 'vendors') loadVendors();
+      if (btn.dataset.tab === 'audit')   loadAudit();
     });
   });
 
@@ -245,13 +301,17 @@
     fd.append('photo', logSelectedFile);
     fd.append('vendor_name', logVendor.value.trim());
     fd.append('plate_number', logPlate.value.trim().toUpperCase());
-    if (logCaptureTime.value) fd.append('capture_time', logCaptureTime.value);
+    // Only admins may override capture time; the field is hidden for members.
+    if (currentRole === 'admin' && logCaptureTime.value) fd.append('capture_time', logCaptureTime.value);
     if (logNotes.value.trim()) fd.append('notes', logNotes.value.trim());
+
+    const headers = { 'X-Admin-Pin': adminPin };
+    if (actorName) headers['X-Actor'] = actorName;
 
     try {
       const r = await fetch('/api/admin/entries', {
         method: 'POST',
-        headers: { 'X-Admin-Pin': adminPin },
+        headers,
         body: fd
       });
       const d = await r.json();
@@ -332,7 +392,9 @@
               ${e.is_duplicate ? ' · <span class="badge badge-inactive">duplicate</span>' : ''}
             </div>
           </div>
-          <button class="btn btn-sm btn-danger" data-action="delete-entry">Delete</button>
+          ${currentRole === 'admin'
+            ? '<button class="btn btn-sm btn-danger" data-action="delete-entry">Delete</button>'
+            : ''}
         </div>`;
     }).join('');
 
@@ -415,6 +477,67 @@
     const d = await r.json();
     showStatus(dangerStatus, r.ok ? d.message : (d.error || 'Failed'), r.ok ? 'success' : 'error');
   });
+
+  // ── Audit Log (admin only) ─────────────────────────────────────────────────
+  const auditList     = document.getElementById('audit-list');
+  const auditCount    = document.getElementById('audit-count');
+  const auditPager    = document.getElementById('audit-pager');
+  const btnAuditPrev  = document.getElementById('btn-audit-prev');
+  const btnAuditNext  = document.getElementById('btn-audit-next');
+  const auditPageInfo = document.getElementById('audit-page-info');
+  let auditPage = 1;
+
+  const ACTION_LABELS = {
+    create_entry:      '➕ Logged entry',
+    create_device:     '📱 Added device',
+    update_device:     '📱 Updated device',
+    activate_device:   '📱 Activated device',
+    deactivate_device: '📱 Deactivated device',
+    delete_device:     '🗑️ Deleted device',
+    create_vendor:     '🏷️ Added vendor',
+    update_vendor:     '🏷️ Renamed vendor',
+    merge_vendor:      '🏷️ Merged vendor',
+    delete_vendor:     '🗑️ Deleted vendor'
+  };
+
+  async function loadAudit() {
+    auditList.innerHTML = '<div class="empty-state">Loading…</div>';
+    const r = await apiFetch(`/api/admin/audit?page=${auditPage}`);
+    if (!r.ok) { auditList.innerHTML = '<div class="empty-state">Could not load audit log.</div>'; return; }
+    const d = await r.json();
+
+    if (!d.logs?.length) {
+      auditList.innerHTML = '<div class="empty-state">No member activity recorded yet.</div>';
+      auditCount.textContent = '';
+      auditPager.classList.add('hidden');
+      return;
+    }
+
+    const fmt = ts => new Date(ts).toLocaleString('en-IN',
+      { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+    auditCount.textContent = `${d.total} total`;
+    auditList.innerHTML = d.logs.map(l => `
+      <div class="audit-row">
+        <div class="audit-main">
+          <span class="audit-action">${ACTION_LABELS[l.action] || escHtml(l.action)}</span>
+          ${l.details ? `<span class="audit-details">${escHtml(l.details)}</span>` : ''}
+        </div>
+        <div class="audit-meta">
+          👤 ${escHtml(l.actor || 'unnamed member')} · ${fmt(l.created_at)}
+        </div>
+      </div>
+    `).join('');
+
+    const totalPages = Math.max(1, Math.ceil(d.total / d.limit));
+    auditPager.classList.toggle('hidden', totalPages <= 1);
+    btnAuditPrev.disabled = auditPage <= 1;
+    btnAuditNext.disabled = auditPage >= totalPages;
+    auditPageInfo.textContent = `Page ${auditPage} of ${totalPages}`;
+  }
+
+  btnAuditPrev.addEventListener('click', () => { if (auditPage > 1) { auditPage--; loadAudit(); } });
+  btnAuditNext.addEventListener('click', () => { auditPage++; loadAudit(); });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function showStatus(el, msg, type) {

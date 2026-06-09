@@ -14,21 +14,28 @@
       <div class="header-brand">
         <span class="header-icon">⚙️</span>
         <div>
-          <h1>Admin Panel</h1>
+          <h1 id="panel-title">Admin Panel</h1>
           <p>Tanker Tracker Configuration</p>
         </div>
       </div>
-      <a href="/" class="btn btn-outline btn-sm">← Dashboard</a>
+      <div class="header-right">
+        <span id="role-badge" class="role-badge hidden"></span>
+        <a href="/" class="btn btn-outline btn-sm">← Dashboard</a>
+      </div>
     </div>
   </header>
 
   <!-- PIN screen -->
   <main class="admin-main" id="pin-screen">
     <section class="card pin-card">
-      <h2>Enter Admin PIN</h2>
+      <h2>Enter PIN</h2>
       <div class="field-group" style="margin-top:16px">
         <input type="password" id="pin-input" class="admin-input" placeholder="PIN"
-               autocomplete="off" maxlength="20">
+               autocomplete="off" maxlength="40">
+      </div>
+      <div class="field-group">
+        <label for="actor-name">Your name <span class="hint">(General Body members only)</span></label>
+        <input type="text" id="actor-name" class="admin-input" placeholder="e.g. Ramesh Kumar" autocomplete="off">
       </div>
       <div id="pin-error" class="status-msg error hidden"></div>
       <button class="btn btn-primary btn-lg" id="btn-pin-submit" style="margin-top:8px">Unlock</button>
@@ -44,7 +51,8 @@
       <button class="tab-btn" data-tab="vendors">🏷️ Vendors</button>
       <button class="tab-btn" data-tab="entries">📋 Entries</button>
       <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
-      <button class="tab-btn" data-tab="danger">⚠️ Danger Zone</button>
+      <button class="tab-btn" data-tab="audit" data-admin-only>📜 Audit Log</button>
+      <button class="tab-btn" data-tab="danger" data-admin-only>⚠️ Danger Zone</button>
     </div>
 
     <!-- Log Entry tab -->
@@ -82,7 +90,7 @@
         <input type="text" id="log-plate" class="admin-input" placeholder="e.g. MH12AB1234" autocomplete="off" style="text-transform:uppercase">
       </div>
 
-      <div class="field-group">
+      <div class="field-group" id="log-capture-time-group">
         <label for="log-capture-time">
           Capture Time
           <span class="hint">(auto-detected from photo; edit if needed)</span>
@@ -192,6 +200,23 @@
         <button class="btn btn-outline" id="btn-clear-geofence">Disable Geofencing</button>
       </div>
       <div id="geofence-status" class="status-msg hidden"></div>
+    </section>
+
+    <!-- Audit Log tab (admin only) -->
+    <section id="tab-audit" class="tab-content card hidden">
+      <div class="card-header">
+        <h2 class="card-title">Audit Log</h2>
+        <span id="audit-count" class="hint"></span>
+      </div>
+      <p class="help-text">Every action performed by General Body members is recorded here. Admin actions are not logged.</p>
+      <div id="audit-list">
+        <div class="empty-state">Loading…</div>
+      </div>
+      <div id="audit-pager" class="entries-pager hidden">
+        <button class="btn btn-outline btn-sm" id="btn-audit-prev">← Prev</button>
+        <span id="audit-page-info"></span>
+        <button class="btn btn-outline btn-sm" id="btn-audit-next">Next →</button>
+      </div>
     </section>
 
     <!-- Danger zone tab -->

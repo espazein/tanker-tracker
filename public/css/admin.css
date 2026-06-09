@@ -12,6 +12,25 @@
 
 .admin-main { max-width: 720px; margin: 0 auto; padding: 20px 16px; }
 
+.header-right { display: flex; align-items: center; gap: 10px; }
+.role-badge {
+  font-size: .75rem; font-weight: 700; padding: 4px 10px;
+  border-radius: 20px; cursor: pointer; white-space: nowrap;
+  background: rgba(255,255,255,.18); color: #fff;
+}
+.role-badge.member { background: #fde68a; color: #78350f; }
+.role-badge:hover { opacity: .85; }
+
+/* Audit log */
+.audit-row {
+  padding: 12px 0; border-bottom: 1px solid var(--gray-100);
+}
+.audit-row:last-child { border-bottom: none; }
+.audit-main { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.audit-action  { font-weight: 700; font-size: .88rem; }
+.audit-details { font-size: .85rem; color: var(--gray-700); }
+.audit-meta    { font-size: .76rem; color: var(--gray-400); margin-top: 3px; }
+
 /* PIN screen */
 .pin-card { max-width: 360px; margin: 0 auto; text-align: center; padding: 32px 24px; }
 .pin-card h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
