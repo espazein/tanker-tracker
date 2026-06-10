@@ -72,15 +72,18 @@ router.get('/range', (req, res) => {
     GROUP BY vendor_name ORDER BY count DESC
   `).all(from, to);
 
-  const LIMIT = 500;
+  // Paginate the deliveries list (total + vendor breakdown cover the whole range).
+  const limit  = 10;
+  const page   = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * limit;
   const entries = db.prepare(`
     SELECT id, vendor_name, plate_number, plate_auto_detected, exif_timestamp,
            gps_lat, gps_lng, submitted_at, notes, photo_path
     FROM entries WHERE submitted_at >= ? AND submitted_at < ? AND is_duplicate = 0
-    ORDER BY submitted_at DESC LIMIT ?
-  `).all(from, to, LIMIT);
+    ORDER BY submitted_at DESC LIMIT ? OFFSET ?
+  `).all(from, to, limit, offset);
 
-  res.json({ total, by_vendor: byVendor, entries, truncated: total > LIMIT, from, to });
+  res.json({ total, by_vendor: byVendor, entries, page, limit, from, to });
 });
 
 router.get('/entries', (req, res) => {

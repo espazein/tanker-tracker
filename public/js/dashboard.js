@@ -19,8 +19,12 @@
   const btnApplyRange = document.getElementById('btn-apply-range');
   const filterSummary = document.getElementById('filter-summary');
   const filterVendors = document.getElementById('filter-vendors');
+  const deliveriesPager = document.getElementById('deliveries-pager');
+  const btnDelPrev      = document.getElementById('btn-deliveries-prev');
+  const btnDelNext      = document.getElementById('btn-deliveries-next');
+  const delPageInfo     = document.getElementById('deliveries-page-info');
 
-  let currentRange = null; // { from, to, label, preset }
+  let currentRange = null; // { from, to, label, preset, page }
 
   function timeAgo(ts) {
     const diff = Date.now() - ts;
@@ -185,17 +189,32 @@
     `).join('');
   }
 
-  async function applyRange(from, to, label) {
+  // Render the current range (reads currentRange, incl. its page).
+  async function applyRange() {
+    if (!currentRange) return;
+    const { from, to, label, page } = currentRange;
     try {
-      const r = await fetch(`/api/dashboard/range?from=${from}&to=${to}`);
+      const r = await fetch(`/api/dashboard/range?from=${from}&to=${to}&page=${page}`);
       const d = await r.json();
       const noun = d.total === 1 ? 'delivery' : 'deliveries';
-      filterSummary.textContent = `${d.total} ${noun} · ${label}` + (d.truncated ? ' (showing latest 500)' : '');
+      filterSummary.textContent = `${d.total} ${noun} · ${label}`;
       renderFilterVendors(d.by_vendor);
       renderEntries(d.entries, true);
+
+      const totalPages = Math.max(1, Math.ceil(d.total / d.limit));
+      deliveriesPager.classList.toggle('hidden', totalPages <= 1);
+      btnDelPrev.disabled = page <= 1;
+      btnDelNext.disabled = page >= totalPages;
+      delPageInfo.textContent = `Page ${page} of ${totalPages}`;
     } catch (e) {
       console.error('Range load failed', e);
     }
+  }
+
+  // Select a new range (resets to page 1).
+  function setRange(range) {
+    currentRange = { ...range, page: 1 };
+    applyRange();
   }
 
   function refreshFilter() {
@@ -205,7 +224,7 @@
       const [from, to, label] = rangeFor(currentRange.preset);
       currentRange = { ...currentRange, from, to, label };
     }
-    applyRange(currentRange.from, currentRange.to, currentRange.label);
+    applyRange();
   }
 
   filterBar.addEventListener('click', e => {
@@ -217,8 +236,7 @@
     if (preset === 'custom') { customRange.classList.remove('hidden'); return; }
     customRange.classList.add('hidden');
     const [from, to, label] = rangeFor(preset);
-    currentRange = { from, to, label, preset };
-    applyRange(from, to, label);
+    setRange({ from, to, label, preset });
   });
 
   btnApplyRange.addEventListener('click', () => {
@@ -227,16 +245,22 @@
     const t = new Date(rangeTo.value + 'T00:00:00'); t.setDate(t.getDate() + 1); // include the To day
     if (t.getTime() <= f.getTime()) { filterSummary.textContent = 'To date must be on or after From date.'; return; }
     const label = `${rangeFrom.value} → ${rangeTo.value}`;
-    currentRange = { from: f.getTime(), to: t.getTime(), label, preset: 'custom' };
-    applyRange(currentRange.from, currentRange.to, label);
+    setRange({ from: f.getTime(), to: t.getTime(), label, preset: 'custom' });
+  });
+
+  btnDelPrev.addEventListener('click', () => {
+    if (currentRange && currentRange.page > 1) { currentRange.page--; applyRange(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  });
+  btnDelNext.addEventListener('click', () => {
+    if (currentRange) { currentRange.page++; applyRange(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
 
   // ── Init + auto-refresh ─────────────────────────────────────────────────────
   (function init() {
     const [from, to, label] = rangeFor('week');   // default view: This Week
-    currentRange = { from, to, label, preset: 'week' };
+    currentRange = { from, to, label, preset: 'week', page: 1 };
     loadStats();
-    applyRange(from, to, label);
+    applyRange();
   })();
 
   setInterval(() => { loadStats(); refreshFilter(); }, 60000);
