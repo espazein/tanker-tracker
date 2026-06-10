@@ -53,6 +53,36 @@ router.get('/stats', (req, res) => {
   });
 });
 
+// Filtered view: count + vendor breakdown + deliveries for a date range.
+// from/to are epoch ms; the range is [from, to).
+router.get('/range', (req, res) => {
+  const from = parseInt(req.query.from);
+  const to   = parseInt(req.query.to);
+  if (isNaN(from) || isNaN(to) || to <= from) {
+    return res.status(400).json({ error: 'from and to (epoch ms, to > from) are required' });
+  }
+
+  const total = db.prepare(
+    'SELECT COUNT(*) as count FROM entries WHERE submitted_at >= ? AND submitted_at < ? AND is_duplicate = 0'
+  ).get(from, to).count;
+
+  const byVendor = db.prepare(`
+    SELECT vendor_name, COUNT(*) as count
+    FROM entries WHERE submitted_at >= ? AND submitted_at < ? AND is_duplicate = 0
+    GROUP BY vendor_name ORDER BY count DESC
+  `).all(from, to);
+
+  const LIMIT = 500;
+  const entries = db.prepare(`
+    SELECT id, vendor_name, plate_number, plate_auto_detected, exif_timestamp,
+           gps_lat, gps_lng, submitted_at, notes, photo_path
+    FROM entries WHERE submitted_at >= ? AND submitted_at < ? AND is_duplicate = 0
+    ORDER BY submitted_at DESC LIMIT ?
+  `).all(from, to, LIMIT);
+
+  res.json({ total, by_vendor: byVendor, entries, truncated: total > LIMIT, from, to });
+});
+
 router.get('/entries', (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = 20;

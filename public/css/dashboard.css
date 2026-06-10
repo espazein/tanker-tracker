@@ -100,6 +100,31 @@
 .tag-gps { background: #fce7f3; color: #9d174d; }
 .entry-time { font-size: .78rem; color: var(--gray-400); }
 
+/* Date filter */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.filter-chip {
+  padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--gray-200);
+  background: #fff; color: var(--gray-700); font-size: .82rem; font-weight: 600;
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.filter-chip:hover  { background: var(--gray-100); }
+.filter-chip.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+.custom-range {
+  display: flex; flex-wrap: wrap; align-items: end; gap: 12px;
+  padding: 12px; margin-bottom: 14px;
+  background: var(--gray-50); border: 1px solid var(--gray-100); border-radius: 10px;
+}
+.custom-range label { font-size: .78rem; font-weight: 600; color: var(--gray-500); display: flex; flex-direction: column; gap: 4px; }
+.custom-range input[type=date] {
+  padding: 8px 10px; border: 1.5px solid var(--gray-200); border-radius: 8px;
+  font-size: .85rem; color: var(--gray-900); background: #fff;
+}
+
+.filter-summary { font-size: .9rem; font-weight: 700; color: var(--gray-700); margin-bottom: 10px; }
+.filter-vendors { margin-bottom: 14px; }
+.filter-vendors:empty { display: none; }
+
 .last-updated { font-size: .75rem; color: var(--gray-400); }
 #load-more-wrap { text-align: center; margin-top: 16px; }
 

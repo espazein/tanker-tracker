@@ -99,17 +99,31 @@
 
     </div>
 
-    <!-- Recent entries -->
+    <!-- Deliveries (filterable) -->
     <section class="card">
       <div class="card-header">
-        <h2 class="card-title">Recent Deliveries</h2>
+        <h2 class="card-title">Deliveries</h2>
         <span id="last-updated" class="last-updated"></span>
       </div>
+
+      <div class="filter-bar">
+        <button class="filter-chip" data-range="today">Today</button>
+        <button class="filter-chip active" data-range="week">This Week</button>
+        <button class="filter-chip" data-range="month">This Month</button>
+        <button class="filter-chip" data-range="custom">Custom</button>
+      </div>
+
+      <div id="custom-range" class="custom-range hidden">
+        <label>From <input type="date" id="range-from"></label>
+        <label>To <input type="date" id="range-to"></label>
+        <button id="btn-apply-range" class="btn btn-primary btn-sm">Apply</button>
+      </div>
+
+      <div id="filter-summary" class="filter-summary"></div>
+      <div id="filter-vendors" class="filter-vendors"></div>
+
       <div id="entries-list" class="entries-list">
         <div class="empty-state">Loading...</div>
-      </div>
-      <div id="load-more-wrap" class="hidden">
-        <button id="btn-load-more" class="btn btn-outline">Load More</button>
       </div>
     </section>
 

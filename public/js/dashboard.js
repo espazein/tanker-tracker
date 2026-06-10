@@ -12,8 +12,15 @@
   const lbMeta      = document.getElementById('lb-meta');
   const lbClose     = document.getElementById('lb-close');
 
-  let currentPage = 1;
-  let hasMore = false;
+  const filterBar     = document.querySelector('.filter-bar');
+  const customRange   = document.getElementById('custom-range');
+  const rangeFrom     = document.getElementById('range-from');
+  const rangeTo       = document.getElementById('range-to');
+  const btnApplyRange = document.getElementById('btn-apply-range');
+  const filterSummary = document.getElementById('filter-summary');
+  const filterVendors = document.getElementById('filter-vendors');
+
+  let currentRange = null; // { from, to, label, preset }
 
   function timeAgo(ts) {
     const diff = Date.now() - ts;
@@ -47,7 +54,6 @@
 
       renderVendors(d.by_vendor_today);
       renderTrend(d.daily_trend);
-      renderEntries(d.recent_entries, true);
 
       lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}`;
     } catch (e) {
@@ -153,7 +159,85 @@
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // Auto-refresh every 60s
-  loadStats();
-  setInterval(loadStats, 60000);
+  // ── Date filter ─────────────────────────────────────────────────────────────
+  // Compute a [from, to) epoch-ms range for a preset, in local time. Ranges
+  // match the stat cards: week = last 7 days, month = since the 1st.
+  function rangeFor(preset) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    if (preset === 'today') return [today.getTime(), tomorrow.getTime(), 'Today'];
+    if (preset === 'week')  { const s = new Date(today); s.setDate(s.getDate() - 6); return [s.getTime(), tomorrow.getTime(), 'This Week']; }
+    if (preset === 'month') { const s = new Date(today); s.setDate(1); return [s.getTime(), tomorrow.getTime(), 'This Month']; }
+    return null;
+  }
+
+  function renderFilterVendors(vendors) {
+    if (!vendors || !vendors.length) { filterVendors.innerHTML = ''; return; }
+    const max = vendors[0].count;
+    filterVendors.innerHTML = vendors.map(v => `
+      <div class="vendor-row">
+        <span class="vendor-name">${escHtml(v.vendor_name)}</span>
+        <div class="vendor-bar-wrap">
+          <div class="vendor-bar" style="width:${(v.count / max * 100).toFixed(0)}%"></div>
+        </div>
+        <span class="vendor-count">${v.count}</span>
+      </div>
+    `).join('');
+  }
+
+  async function applyRange(from, to, label) {
+    try {
+      const r = await fetch(`/api/dashboard/range?from=${from}&to=${to}`);
+      const d = await r.json();
+      const noun = d.total === 1 ? 'delivery' : 'deliveries';
+      filterSummary.textContent = `${d.total} ${noun} · ${label}` + (d.truncated ? ' (showing latest 500)' : '');
+      renderFilterVendors(d.by_vendor);
+      renderEntries(d.entries, true);
+    } catch (e) {
+      console.error('Range load failed', e);
+    }
+  }
+
+  function refreshFilter() {
+    if (!currentRange) return;
+    // Keep presets current (they shift at midnight); custom stays fixed.
+    if (currentRange.preset && currentRange.preset !== 'custom') {
+      const [from, to, label] = rangeFor(currentRange.preset);
+      currentRange = { ...currentRange, from, to, label };
+    }
+    applyRange(currentRange.from, currentRange.to, currentRange.label);
+  }
+
+  filterBar.addEventListener('click', e => {
+    const btn = e.target.closest('.filter-chip');
+    if (!btn) return;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const preset = btn.dataset.range;
+    if (preset === 'custom') { customRange.classList.remove('hidden'); return; }
+    customRange.classList.add('hidden');
+    const [from, to, label] = rangeFor(preset);
+    currentRange = { from, to, label, preset };
+    applyRange(from, to, label);
+  });
+
+  btnApplyRange.addEventListener('click', () => {
+    if (!rangeFrom.value || !rangeTo.value) { filterSummary.textContent = 'Pick both From and To dates.'; return; }
+    const f = new Date(rangeFrom.value + 'T00:00:00');
+    const t = new Date(rangeTo.value + 'T00:00:00'); t.setDate(t.getDate() + 1); // include the To day
+    if (t.getTime() <= f.getTime()) { filterSummary.textContent = 'To date must be on or after From date.'; return; }
+    const label = `${rangeFrom.value} → ${rangeTo.value}`;
+    currentRange = { from: f.getTime(), to: t.getTime(), label, preset: 'custom' };
+    applyRange(currentRange.from, currentRange.to, label);
+  });
+
+  // ── Init + auto-refresh ─────────────────────────────────────────────────────
+  (function init() {
+    const [from, to, label] = rangeFor('week');   // default view: This Week
+    currentRange = { from, to, label, preset: 'week' };
+    loadStats();
+    applyRange(from, to, label);
+  })();
+
+  setInterval(() => { loadStats(); refreshFilter(); }, 60000);
 })();
