@@ -55,6 +55,26 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+  -- General Body members: per-person login managed by the admin.
+  CREATE TABLE IF NOT EXISTS members (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    pin_hash    TEXT NOT NULL,
+    must_change INTEGER DEFAULT 1,
+    is_active   INTEGER DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    last_login  INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS member_sessions (
+    token      TEXT PRIMARY KEY,
+    member_id  INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_member ON member_sessions(member_id);
 `);
 
 module.exports = db;

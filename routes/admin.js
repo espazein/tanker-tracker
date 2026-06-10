@@ -6,6 +6,7 @@ const fs = require('fs');
 const multer = require('multer');
 const exifr = require('exifr');
 const db = require('../db');
+const { hashPin, lookupSession, deleteMemberSessions } = require('../auth');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -20,24 +21,35 @@ const upload = multer({
     file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('Only image files allowed'))
 });
 
-// Resolve a PIN to a role. ADMIN_PIN → 'admin', MEMBER_PIN → 'member'.
-function resolveRole(pin) {
-  if (!pin) return null;
-  if (process.env.ADMIN_PIN  && pin === process.env.ADMIN_PIN)  return 'admin';
-  if (process.env.MEMBER_PIN && pin === process.env.MEMBER_PIN) return 'member';
-  return null;
-}
-
-// Authenticate as either admin or member. Sets req.role and req.actor.
+// Authenticate as admin (env PIN) or member (session token). Sets req.role,
+// req.actor, and (for members) req.memberId.
 function requireAuth(req, res, next) {
   if (!process.env.ADMIN_PIN) return res.status(500).json({ error: 'ADMIN_PIN not configured' });
+
   const pin = req.headers['x-admin-pin'] || req.body?.pin;
-  if (!pin) return res.status(401).json({ error: 'Authentication required' });
-  const role = resolveRole(pin);
-  if (!role) return res.status(403).json({ error: 'Invalid PIN' });
-  req.role = role;
-  req.actor = (req.headers['x-actor'] || '').toString().trim().slice(0, 60) || null;
-  next();
+  if (pin && pin === process.env.ADMIN_PIN) {
+    req.role = 'admin';
+    req.actor = null;
+    return next();
+  }
+
+  const token = req.headers['x-session-token'];
+  if (token) {
+    const member = lookupSession(token);
+    if (member) {
+      // A member who hasn't set their own PIN yet can only reach change-pin.
+      if (member.must_change) {
+        return res.status(403).json({ error: 'must_change', message: 'Set a new PIN to continue.' });
+      }
+      req.role = 'member';
+      req.actor = member.name;
+      req.memberId = member.id;
+      return next();
+    }
+  }
+
+  if (pin || token) return res.status(403).json({ error: 'Invalid credentials' });
+  return res.status(401).json({ error: 'Authentication required' });
 }
 
 // Gate actions reserved for administrators (delete data, wipe, geofence).
@@ -75,6 +87,64 @@ router.get('/audit', requireAuth, requireAdmin, (req, res) => {
   const logs  = db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
   const total = db.prepare('SELECT COUNT(*) as count FROM audit_log').get().count;
   res.json({ logs, total, page, limit });
+});
+
+// --- Members (admin-managed accounts) ---
+const PIN_MIN = 4, PIN_MAX = 12;
+
+router.get('/members', requireAuth, requireAdmin, (req, res) => {
+  const members = db.prepare(`
+    SELECT id, name, must_change, is_active, created_at, last_login
+    FROM members ORDER BY is_active DESC, name COLLATE NOCASE ASC
+  `).all();
+  res.json({ members });
+});
+
+router.post('/members', requireAuth, requireAdmin, (req, res) => {
+  const name = (req.body?.name || '').trim();
+  const pin  = (req.body?.pin || '').trim();
+  if (!name) return res.status(400).json({ error: 'Member name is required' });
+  if (pin.length < PIN_MIN || pin.length > PIN_MAX) {
+    return res.status(400).json({ error: `Temporary PIN must be ${PIN_MIN}–${PIN_MAX} characters` });
+  }
+  try {
+    const result = db.prepare(
+      'INSERT INTO members (name, pin_hash, must_change, created_at) VALUES (?, ?, 1, ?)'
+    ).run(name, hashPin(pin), Date.now());
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'A member with this name already exists' });
+    throw e;
+  }
+});
+
+// Reset a member's PIN to a new temporary one; forces a change on next login.
+router.post('/members/:id/reset', requireAuth, requireAdmin, (req, res) => {
+  const member = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+  const pin = (req.body?.pin || '').trim();
+  if (pin.length < PIN_MIN || pin.length > PIN_MAX) {
+    return res.status(400).json({ error: `Temporary PIN must be ${PIN_MIN}–${PIN_MAX} characters` });
+  }
+  db.prepare('UPDATE members SET pin_hash = ?, must_change = 1 WHERE id = ?').run(hashPin(pin), member.id);
+  deleteMemberSessions(member.id); // log them out everywhere
+  res.json({ success: true });
+});
+
+router.patch('/members/:id', requireAuth, requireAdmin, (req, res) => {
+  const member = db.prepare('SELECT * FROM members WHERE id = ?').get(req.params.id);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+  const newActive = req.body.is_active !== undefined ? (req.body.is_active ? 1 : 0) : member.is_active;
+  db.prepare('UPDATE members SET is_active = ? WHERE id = ?').run(newActive, member.id);
+  if (!newActive) deleteMemberSessions(member.id);
+  res.json({ success: true });
+});
+
+router.delete('/members/:id', requireAuth, requireAdmin, (req, res) => {
+  const r = db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
+  if (!r.changes) return res.status(404).json({ error: 'Member not found' });
+  deleteMemberSessions(req.params.id);
+  res.json({ success: true });
 });
 
 // --- Entries ---

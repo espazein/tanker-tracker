@@ -1,101 +1,188 @@
 (() => {
-  let adminPin   = sessionStorage.getItem('admin_pin') || '';
-  let actorName  = sessionStorage.getItem('actor_name') || '';
-  let currentRole = '';
+  let currentRole = '';                                       // 'admin' | 'member'
+  let adminPin    = '';                                       // admin credential
+  let memberToken = '';                                       // member session token
+  let actorName   = '';                                       // member display name
+  let pendingToken = '', pendingName = '';                    // during forced change-pin
 
-  const pinScreen    = document.getElementById('pin-screen');
-  const adminContent = document.getElementById('admin-content');
-  const pinInput     = document.getElementById('pin-input');
-  const actorInput   = document.getElementById('actor-name');
-  const btnPinSubmit = document.getElementById('btn-pin-submit');
-  const pinError     = document.getElementById('pin-error');
-  const roleBadge    = document.getElementById('role-badge');
-  const panelTitle   = document.getElementById('panel-title');
+  const pinScreen       = document.getElementById('pin-screen');
+  const changePinScreen = document.getElementById('change-pin-screen');
+  const adminContent    = document.getElementById('admin-content');
+  const pinInput        = document.getElementById('pin-input');
+  const actorInput      = document.getElementById('actor-name');
+  const btnPinSubmit    = document.getElementById('btn-pin-submit');
+  const pinError        = document.getElementById('pin-error');
+  const roleBadge       = document.getElementById('role-badge');
+  const panelTitle      = document.getElementById('panel-title');
+  const newPinInput     = document.getElementById('new-pin');
+  const newPinConfirm   = document.getElementById('new-pin-confirm');
+  const btnChangePin    = document.getElementById('btn-change-pin');
+  const changePinError  = document.getElementById('change-pin-error');
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   function apiFetch(path, opts = {}) {
-    const headers = { 'X-Admin-Pin': adminPin, ...(opts.headers || {}) };
-    if (actorName) headers['X-Actor'] = actorName;
+    const headers = { ...(opts.headers || {}) };
+    if (currentRole === 'admin')       headers['X-Admin-Pin']     = adminPin;
+    else if (currentRole === 'member') headers['X-Session-Token'] = memberToken;
     if (opts.body) headers['Content-Type'] = 'application/json';
     return fetch(path, { ...opts, headers });
   }
 
-  // Returns the role string ('admin'|'member') or null if the PIN is invalid.
-  async function checkSession(pin, name) {
-    const headers = { 'X-Admin-Pin': pin };
-    if (name) headers['X-Actor'] = name;
-    const r = await fetch('/api/admin/session', { headers });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.role || null;
+  function clearAuth() {
+    ['auth_role', 'admin_pin', 'member_token', 'actor_name'].forEach(k => sessionStorage.removeItem(k));
+    currentRole = ''; adminPin = ''; memberToken = ''; actorName = '';
   }
 
   function enterPanel(role) {
     currentRole = role;
     pinScreen.classList.add('hidden');
+    changePinScreen.classList.add('hidden');
     adminContent.classList.remove('hidden');
     applyRolePermissions(role);
     loadAll();
   }
 
+  function showPinError(msg) {
+    pinError.textContent = msg;
+    pinError.classList.remove('hidden');
+  }
+
   async function unlock() {
-    const pin  = pinInput.value.trim();
     const name = actorInput.value.trim();
+    const pin  = pinInput.value.trim();
     if (!pin) return;
     btnPinSubmit.disabled = true;
-    btnPinSubmit.textContent = 'Checking…';
+    btnPinSubmit.textContent = 'Signing in…';
     pinError.classList.add('hidden');
 
-    const role = await checkSession(pin, name);
-    if (role) {
-      adminPin = pin;
-      actorName = role === 'member' ? name : ''; // name only meaningful for members
-      sessionStorage.setItem('admin_pin', pin);
-      sessionStorage.setItem('actor_name', actorName);
-      if (role === 'member' && !name) {
-        pinError.textContent = 'Please enter your name so your actions can be attributed.';
-        pinError.classList.remove('hidden');
-        btnPinSubmit.disabled = false;
-        btnPinSubmit.textContent = 'Unlock';
-        return;
-      }
-      enterPanel(role);
-    } else {
-      pinError.textContent = 'Invalid PIN. Try again.';
-      pinError.classList.remove('hidden');
+    try {
+      if (name) await memberLogin(name, pin);
+      else      await adminLogin(pin);
+    } finally {
+      btnPinSubmit.disabled = false;
+      btnPinSubmit.textContent = 'Sign In';
     }
-    btnPinSubmit.disabled = false;
-    btnPinSubmit.textContent = 'Unlock';
+  }
+
+  async function adminLogin(pin) {
+    const r = await fetch('/api/admin/session', { headers: { 'X-Admin-Pin': pin } });
+    if (r.ok && (await r.json()).role === 'admin') {
+      adminPin = pin; currentRole = 'admin';
+      sessionStorage.setItem('auth_role', 'admin');
+      sessionStorage.setItem('admin_pin', pin);
+      enterPanel('admin');
+    } else {
+      showPinError('Invalid PIN. (Members: enter your name above.)');
+    }
+  }
+
+  async function memberLogin(name, pin) {
+    let r;
+    try {
+      r = await fetch('/api/member/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, pin })
+      });
+    } catch { showPinError('Network error. Please try again.'); return; }
+
+    if (r.status === 429) { showPinError('Too many attempts. Try again in 15 minutes.'); return; }
+    if (!r.ok)            { showPinError('Invalid name or PIN.'); return; }
+
+    const d = await r.json();
+    if (d.must_change) {
+      pendingToken = d.token; pendingName = d.name;
+      pinScreen.classList.add('hidden');
+      changePinScreen.classList.remove('hidden');
+      newPinInput.value = ''; newPinConfirm.value = '';
+      changePinError.classList.add('hidden');
+      newPinInput.focus();
+    } else {
+      finishMemberLogin(d.token, d.name);
+    }
+  }
+
+  function finishMemberLogin(token, name) {
+    memberToken = token; actorName = name; currentRole = 'member';
+    sessionStorage.setItem('auth_role', 'member');
+    sessionStorage.setItem('member_token', token);
+    sessionStorage.setItem('actor_name', name);
+    enterPanel('member');
+  }
+
+  async function submitChangePin() {
+    const p1 = newPinInput.value.trim();
+    const p2 = newPinConfirm.value.trim();
+    changePinError.classList.add('hidden');
+    if (p1.length < 4 || p1.length > 12) { changePinError.textContent = 'PIN must be 4–12 characters'; changePinError.classList.remove('hidden'); return; }
+    if (p1 !== p2) { changePinError.textContent = 'PINs do not match'; changePinError.classList.remove('hidden'); return; }
+
+    btnChangePin.disabled = true;
+    btnChangePin.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/member/change-pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: pendingToken, new_pin: p1 })
+      });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        finishMemberLogin(pendingToken, pendingName);
+      } else {
+        changePinError.textContent = d.error || 'Could not change PIN';
+        changePinError.classList.remove('hidden');
+      }
+    } finally {
+      btnChangePin.disabled = false;
+      btnChangePin.textContent = 'Save & Continue';
+    }
   }
 
   btnPinSubmit.addEventListener('click', unlock);
   pinInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
   actorInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+  btnChangePin.addEventListener('click', submitChangePin);
+  newPinConfirm.addEventListener('keydown', e => { if (e.key === 'Enter') submitChangePin(); });
 
-  roleBadge.addEventListener('click', () => {
+  roleBadge.addEventListener('click', async () => {
     if (!confirm('Sign out?')) return;
-    sessionStorage.removeItem('admin_pin');
-    sessionStorage.removeItem('actor_name');
+    if (currentRole === 'member' && memberToken) {
+      try {
+        await fetch('/api/member/logout', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: memberToken })
+        });
+      } catch {}
+    }
+    clearAuth();
     location.reload();
   });
 
-  if (adminPin) {
-    checkSession(adminPin, actorName).then(role => {
-      if (role) enterPanel(role);
-      else { sessionStorage.removeItem('admin_pin'); adminPin = ''; }
-    });
-  }
+  // Restore a saved session on reload.
+  (function restore() {
+    const role = sessionStorage.getItem('auth_role');
+    if (role === 'admin') {
+      adminPin = sessionStorage.getItem('admin_pin') || '';
+      fetch('/api/admin/session', { headers: { 'X-Admin-Pin': adminPin } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.role === 'admin') enterPanel('admin'); else clearAuth(); });
+    } else if (role === 'member') {
+      memberToken = sessionStorage.getItem('member_token') || '';
+      actorName   = sessionStorage.getItem('actor_name') || '';
+      fetch('/api/admin/session', { headers: { 'X-Session-Token': memberToken } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.role === 'member') enterPanel('member'); else clearAuth(); });
+    }
+  })();
 
   // Tailor the panel to the role. Members get a restricted view.
   function applyRolePermissions(role) {
     const isMember = role === 'member';
 
     roleBadge.classList.remove('hidden');
-    roleBadge.textContent = isMember ? `👤 Member: ${actorName || '—'}` : '🛡️ Admin';
+    roleBadge.textContent = isMember ? `👤 ${actorName || 'Member'}` : '🛡️ Admin';
     roleBadge.classList.toggle('member', isMember);
     panelTitle.textContent = isMember ? 'General Body Panel' : 'Admin Panel';
 
-    // Hide admin-only tabs (Audit, Danger Zone) for members
+    // Hide admin-only tabs (Members, Audit, Danger Zone) for members
     document.querySelectorAll('.tab-btn[data-admin-only]').forEach(btn => {
       btn.classList.toggle('hidden', isMember);
     });
@@ -120,6 +207,7 @@
       document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
       if (btn.dataset.tab === 'entries') loadEntries();
       if (btn.dataset.tab === 'vendors') loadVendors();
+      if (btn.dataset.tab === 'members') loadMembers();
       if (btn.dataset.tab === 'audit')   loadAudit();
     });
   });
@@ -305,8 +393,9 @@
     if (currentRole === 'admin' && logCaptureTime.value) fd.append('capture_time', logCaptureTime.value);
     if (logNotes.value.trim()) fd.append('notes', logNotes.value.trim());
 
-    const headers = { 'X-Admin-Pin': adminPin };
-    if (actorName) headers['X-Actor'] = actorName;
+    const headers = currentRole === 'admin'
+      ? { 'X-Admin-Pin': adminPin }
+      : { 'X-Session-Token': memberToken };
 
     try {
       const r = await fetch('/api/admin/entries', {
@@ -476,6 +565,112 @@
     const r = await apiFetch('/api/admin/truncate', { method: 'POST', body: JSON.stringify({}) });
     const d = await r.json();
     showStatus(dangerStatus, r.ok ? d.message : (d.error || 'Failed'), r.ok ? 'success' : 'error');
+  });
+
+  // ── Members (admin only) ───────────────────────────────────────────────────
+  const membersList     = document.getElementById('members-list');
+  const btnAddMember    = document.getElementById('btn-add-member');
+  const addMemberForm   = document.getElementById('add-member-form');
+  const newMemberName   = document.getElementById('new-member-name');
+  const newMemberPin    = document.getElementById('new-member-pin');
+  const btnSaveMember   = document.getElementById('btn-save-member');
+  const btnCancelMember = document.getElementById('btn-cancel-member');
+  const newMemberResult = document.getElementById('new-member-result');
+
+  async function loadMembers() {
+    membersList.innerHTML = '<div class="empty-state">Loading…</div>';
+    const r = await apiFetch('/api/admin/members');
+    const d = await r.json();
+    if (!d.members?.length) {
+      membersList.innerHTML = '<div class="empty-state">No members yet. Add one to give a General Body member access.</div>';
+      return;
+    }
+    membersList.innerHTML = d.members.map(m => {
+      const status = !m.is_active
+        ? '<span class="badge badge-inactive">Inactive</span>'
+        : m.must_change
+          ? '<span class="badge badge-pending">PIN not set</span>'
+          : '<span class="badge badge-active">Active</span>';
+      const last = m.last_login ? `Last login ${timeAgo(m.last_login)}` : 'Never logged in';
+      return `
+        <div class="device-row ${m.is_active ? '' : 'inactive'}" data-id="${m.id}">
+          <div class="device-info-block">
+            <div class="device-name">${escHtml(m.name)}</div>
+            <div class="device-meta">${last} · ${status}</div>
+          </div>
+          <div class="device-actions">
+            <button class="btn btn-sm btn-outline" data-action="reset">Reset PIN</button>
+            <button class="btn btn-sm ${m.is_active ? 'btn-outline' : 'btn-success'}"
+                    data-action="toggle" data-active="${m.is_active}">
+              ${m.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+            <button class="btn btn-sm btn-danger" data-action="delete">Delete</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  membersList.addEventListener('click', async e => {
+    const row = e.target.closest('[data-id]');
+    if (!row) return;
+    const id = row.dataset.id;
+    const action = e.target.dataset.action;
+    const name = row.querySelector('.device-name').textContent;
+
+    if (action === 'reset') {
+      const pin = prompt(`Set a new temporary PIN for ${name} (4–12 characters).\nThey'll be asked to change it on next login.`);
+      if (pin === null) return;
+      const r = await apiFetch(`/api/admin/members/${id}/reset`, { method: 'POST', body: JSON.stringify({ pin: pin.trim() }) });
+      const d = await r.json();
+      if (r.ok) alert(`PIN reset. Share this temporary PIN with ${name}: ${pin.trim()}`);
+      else alert(d.error || 'Reset failed');
+      loadMembers();
+    } else if (action === 'toggle') {
+      const active = e.target.dataset.active === '1';
+      await apiFetch(`/api/admin/members/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active: active ? 0 : 1 }) });
+      loadMembers();
+    } else if (action === 'delete') {
+      if (!confirm(`Delete member ${name}? They will lose access immediately.`)) return;
+      await apiFetch(`/api/admin/members/${id}`, { method: 'DELETE' });
+      loadMembers();
+    }
+  });
+
+  btnAddMember.addEventListener('click', () => {
+    addMemberForm.classList.toggle('hidden');
+    newMemberResult.classList.add('hidden');
+    if (!addMemberForm.classList.contains('hidden')) newMemberName.focus();
+  });
+
+  btnCancelMember.addEventListener('click', () => {
+    addMemberForm.classList.add('hidden');
+    newMemberName.value = ''; newMemberPin.value = '';
+    newMemberResult.classList.add('hidden');
+  });
+
+  btnSaveMember.addEventListener('click', async () => {
+    const name = newMemberName.value.trim();
+    const pin  = newMemberPin.value.trim();
+    if (!name) { newMemberName.focus(); return; }
+    btnSaveMember.disabled = true;
+    const r = await apiFetch('/api/admin/members', { method: 'POST', body: JSON.stringify({ name, pin }) });
+    const d = await r.json();
+    btnSaveMember.disabled = false;
+    if (r.ok) {
+      newMemberResult.className = 'new-device-result success';
+      newMemberResult.innerHTML = `
+        <strong>Member created.</strong> Share these with ${escHtml(name)}:<br>
+        Name: <span class="token-display">${escHtml(name)}</span>
+        Temporary PIN: <span class="token-display">${escHtml(pin)}</span>
+        They'll set their own PIN on first login.`;
+      newMemberResult.classList.remove('hidden');
+      newMemberName.value = ''; newMemberPin.value = '';
+      loadMembers();
+    } else {
+      newMemberResult.className = 'new-device-result error';
+      newMemberResult.textContent = d.error || 'Failed to add member';
+      newMemberResult.classList.remove('hidden');
+    }
   });
 
   // ── Audit Log (admin only) ─────────────────────────────────────────────────

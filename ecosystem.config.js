@@ -34,7 +34,6 @@ module.exports = {
       TZ:           env.TZ           || 'Asia/Kolkata',
       PORT:         env.PORT         || 3000,
       ADMIN_PIN:    env.ADMIN_PIN,
-      MEMBER_PIN:   env.MEMBER_PIN,
       SOCIETY_NAME: env.SOCIETY_NAME || 'My Society'
     }
   }]

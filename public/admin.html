@@ -28,17 +28,36 @@
   <!-- PIN screen -->
   <main class="admin-main" id="pin-screen">
     <section class="card pin-card">
-      <h2>Enter PIN</h2>
+      <h2>Sign In</h2>
       <div class="field-group" style="margin-top:16px">
+        <label for="actor-name">Member name <span class="hint">(leave blank if admin)</span></label>
+        <input type="text" id="actor-name" class="admin-input" placeholder="e.g. Ramesh Kumar" autocomplete="off">
+      </div>
+      <div class="field-group">
+        <label for="pin-input">PIN</label>
         <input type="password" id="pin-input" class="admin-input" placeholder="PIN"
                autocomplete="off" maxlength="40">
       </div>
-      <div class="field-group">
-        <label for="actor-name">Your name <span class="hint">(General Body members only)</span></label>
-        <input type="text" id="actor-name" class="admin-input" placeholder="e.g. Ramesh Kumar" autocomplete="off">
-      </div>
       <div id="pin-error" class="status-msg error hidden"></div>
-      <button class="btn btn-primary btn-lg" id="btn-pin-submit" style="margin-top:8px">Unlock</button>
+      <button class="btn btn-primary btn-lg" id="btn-pin-submit" style="margin-top:8px">Sign In</button>
+    </section>
+  </main>
+
+  <!-- Change-PIN screen (first member login / after reset) -->
+  <main class="admin-main hidden" id="change-pin-screen">
+    <section class="card pin-card">
+      <h2>Set Your New PIN</h2>
+      <p class="help-text">Choose a new PIN to replace the temporary one you were given.</p>
+      <div class="field-group">
+        <label for="new-pin">New PIN <span class="hint">(4–12 characters)</span></label>
+        <input type="password" id="new-pin" class="admin-input" autocomplete="off" maxlength="12">
+      </div>
+      <div class="field-group">
+        <label for="new-pin-confirm">Confirm New PIN</label>
+        <input type="password" id="new-pin-confirm" class="admin-input" autocomplete="off" maxlength="12">
+      </div>
+      <div id="change-pin-error" class="status-msg error hidden"></div>
+      <button class="btn btn-primary btn-lg" id="btn-change-pin" style="margin-top:8px">Save &amp; Continue</button>
     </section>
   </main>
 
@@ -50,6 +69,7 @@
       <button class="tab-btn" data-tab="devices">📱 Devices</button>
       <button class="tab-btn" data-tab="vendors">🏷️ Vendors</button>
       <button class="tab-btn" data-tab="entries">📋 Entries</button>
+      <button class="tab-btn" data-tab="members" data-admin-only>👥 Members</button>
       <button class="tab-btn" data-tab="geofence">📍 Geofence</button>
       <button class="tab-btn" data-tab="audit" data-admin-only>📜 Audit Log</button>
       <button class="tab-btn" data-tab="danger" data-admin-only>⚠️ Danger Zone</button>
@@ -175,6 +195,36 @@
         <button class="btn btn-outline btn-sm" id="btn-prev-page">← Prev</button>
         <span id="page-info"></span>
         <button class="btn btn-outline btn-sm" id="btn-next-page">Next →</button>
+      </div>
+    </section>
+
+    <!-- Members tab (admin only) -->
+    <section id="tab-members" class="tab-content card hidden">
+      <div class="card-header">
+        <h2 class="card-title">General Body Members</h2>
+        <button class="btn btn-primary btn-sm" id="btn-add-member">+ Add Member</button>
+      </div>
+      <p class="help-text">Each member signs in with their name and PIN. Set a temporary PIN here — they choose their own on first login. Use Reset if a member forgets theirs.</p>
+
+      <div id="add-member-form" class="add-device-form hidden">
+        <div class="field-group">
+          <label>Member Name</label>
+          <input type="text" id="new-member-name" class="admin-input" placeholder="e.g. Ramesh Kumar">
+        </div>
+        <div class="field-group">
+          <label>Temporary PIN <span class="hint">(4–12 characters; they'll change it)</span></label>
+          <input type="text" id="new-member-pin" class="admin-input" placeholder="e.g. 1234"
+                 autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" id="btn-save-member">Create</button>
+          <button class="btn btn-outline" id="btn-cancel-member">Cancel</button>
+        </div>
+        <div id="new-member-result" class="new-device-result hidden"></div>
+      </div>
+
+      <div id="members-list">
+        <div class="empty-state">Loading members…</div>
       </div>
     </section>
 

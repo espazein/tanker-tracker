@@ -92,6 +92,7 @@
 }
 .badge-active   { background: #dcfce7; color: #15803d; }
 .badge-inactive { background: var(--gray-100); color: var(--gray-500); }
+.badge-pending  { background: #fef3c7; color: #92400e; }
 
 .new-device-result {
   margin-top: 12px; padding: 14px; border-radius: 8px;

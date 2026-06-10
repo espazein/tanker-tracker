@@ -50,6 +50,16 @@ const deviceCheckLimiter = rateLimit({
   message: { error: 'rate_limited' }
 });
 
+// Member login: throttle PIN guessing. Only failed attempts count.
+const memberAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many attempts. Try again in 15 minutes.' }
+});
+
 // Active vendor list — used to populate dropdowns in guard & admin forms.
 app.get('/api/vendors', dashboardLimiter, (req, res) => {
   const vendors = db.prepare(
@@ -66,9 +76,10 @@ app.get('/api/device/check', deviceCheckLimiter, (req, res) => {
   res.json({ valid: !!device });
 });
 
-app.use('/api/submit',    submitLimiter,    require('./routes/submit'));
-app.use('/api/dashboard', dashboardLimiter, require('./routes/dashboard'));
-app.use('/api/admin',     adminLimiter,     require('./routes/admin'));
+app.use('/api/submit',    submitLimiter,      require('./routes/submit'));
+app.use('/api/dashboard', dashboardLimiter,   require('./routes/dashboard'));
+app.use('/api/member',    memberAuthLimiter,  require('./routes/member'));
+app.use('/api/admin',     adminLimiter,       require('./routes/admin'));
 
 app.get('/guard', (req, res) => res.sendFile(path.join(__dirname, 'public/guard.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin.html')));
