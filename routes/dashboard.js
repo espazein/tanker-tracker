@@ -15,7 +15,12 @@ router.get('/stats', (req, res) => {
   d.setUTCHours(0, 0, 0, 0);
   const todayTs = d.getTime() + offMs;
 
-  const weekTs = todayTs - 6 * 86400000;
+  // "This Week" = current calendar week starting Monday (matches the filter).
+  const sinceMon = (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  const weekTs = todayTs - sinceMon * 86400000;
+
+  // The 7-Day Trend stays a true rolling 7-day window.
+  const trendStartTs = todayTs - 6 * 86400000;
 
   const m = new Date(Date.now() - offMs);
   m.setUTCDate(1); m.setUTCHours(0, 0, 0, 0);
@@ -48,7 +53,7 @@ router.get('/stats', (req, res) => {
     FROM entries
     WHERE submitted_at >= ? AND is_duplicate = 0
     GROUP BY day ORDER BY day ASC
-  `).all(offSec, weekTs);
+  `).all(offSec, trendStartTs);
 
   res.json({
     today_total: todayTotal.count,

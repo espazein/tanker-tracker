@@ -175,7 +175,12 @@
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     if (preset === 'today') return [today.getTime(), tomorrow.getTime(), 'Today'];
-    if (preset === 'week')  { const s = new Date(today); s.setDate(s.getDate() - 6); return [s.getTime(), tomorrow.getTime(), 'This Week']; }
+    if (preset === 'week') {
+      // Current calendar week, starting Monday → through today.
+      const sinceMon = (today.getDay() + 6) % 7; // Mon=0 … Sun=6
+      const mon = new Date(today); mon.setDate(today.getDate() - sinceMon);
+      return [mon.getTime(), tomorrow.getTime(), 'This Week'];
+    }
     if (preset === 'month') { const s = new Date(today); s.setDate(1); return [s.getTime(), tomorrow.getTime(), 'This Month']; }
     return null;
   }
