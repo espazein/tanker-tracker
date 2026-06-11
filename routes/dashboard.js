@@ -3,17 +3,23 @@ const router = express.Router();
 const db = require('../db');
 
 router.get('/stats', (req, res) => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayTs = todayStart.getTime();
+  // Compute day boundaries in the VIEWER's timezone (sent as getTimezoneOffset
+  // minutes), not the server's. This keeps the cards, today's vendors, and the
+  // trend consistent regardless of the server OS/Node timezone.
+  const offMin = Number.isFinite(parseInt(req.query.tzOffset)) ? parseInt(req.query.tzOffset) : 0;
+  const offMs  = offMin * 60000; // getTimezoneOffset(): UTC - local (IST = -330)
+  const offSec = offMin * 60;
 
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - 6);
-  const weekTs = weekStart.getTime();
+  // Real UTC epoch of local midnight today
+  const d = new Date(Date.now() - offMs);
+  d.setUTCHours(0, 0, 0, 0);
+  const todayTs = d.getTime() + offMs;
 
-  const monthStart = new Date(todayStart);
-  monthStart.setDate(1);
-  const monthTs = monthStart.getTime();
+  const weekTs = todayTs - 6 * 86400000;
+
+  const m = new Date(Date.now() - offMs);
+  m.setUTCDate(1); m.setUTCHours(0, 0, 0, 0);
+  const monthTs = m.getTime() + offMs;
 
   const todayTotal = db.prepare(`SELECT COUNT(*) as count FROM entries WHERE submitted_at >= ? AND is_duplicate = 0`).get(todayTs);
   const weekTotal  = db.prepare(`SELECT COUNT(*) as count FROM entries WHERE submitted_at >= ? AND is_duplicate = 0`).get(weekTs);
@@ -33,14 +39,16 @@ router.get('/stats', (req, res) => {
     ORDER BY submitted_at DESC LIMIT 30
   `).all();
 
+  // Bucket by the viewer's local day via offset arithmetic (NOT 'localtime',
+  // which would use the server OS timezone and disagree with the cards).
   const dailyTrend = db.prepare(`
     SELECT
-      date(submitted_at/1000, 'unixepoch', 'localtime') as day,
+      date((submitted_at/1000) - ?, 'unixepoch') as day,
       COUNT(*) as count
     FROM entries
     WHERE submitted_at >= ? AND is_duplicate = 0
     GROUP BY day ORDER BY day ASC
-  `).all(weekTs);
+  `).all(offSec, weekTs);
 
   res.json({
     today_total: todayTotal.count,

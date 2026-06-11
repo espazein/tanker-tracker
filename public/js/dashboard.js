@@ -42,13 +42,18 @@
   }
 
   function shortDay(dateStr) {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr + 'T00:00:00'); // parse as local, not UTC
     return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+  }
+
+  // Local YYYY-MM-DD (not UTC, so the "today" trend bar highlights correctly)
+  function localDateStr(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   async function loadStats() {
     try {
-      const r = await fetch('/api/dashboard/stats');
+      const r = await fetch(`/api/dashboard/stats?tzOffset=${new Date().getTimezoneOffset()}`);
       const d = await r.json();
 
       statToday.textContent   = d.today_total;
@@ -85,7 +90,7 @@
   function renderTrend(trend) {
     if (!trend.length) { trendChart.innerHTML = '<div class="empty-state">No data</div>'; return; }
     const max = Math.max(...trend.map(t => t.count), 1);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
 
     trendChart.innerHTML = trend.map(t => {
       const pct = (t.count / max * 88).toFixed(0);
